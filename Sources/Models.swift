@@ -71,6 +71,15 @@ class AppSettings: ObservableObject {
         ]
         UserDefaults.standard.set(data, forKey: settingsKey)
         updateLoginItem()
+
+        // Apply dock visibility immediately
+        NotificationCenter.default.post(
+            name: .dockVisibilityChanged,
+            object: nil,
+            userInfo: ["show": showInDock]
+        )
+        // Signal UI to show a save confirmation toast
+        NotificationCenter.default.post(name: .settingsSaved, object: nil)
     }
 
     func load() {

@@ -655,88 +655,126 @@ struct LogsView: View {
 // MARK: - Settings View
 struct SettingsView: View {
     @StateObject private var settings = AppSettings.shared
+    @State private var showSavedToast = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Settings")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .padding(.top, 28)
-
-                // Gateway
-                SettingsSectionView(title: "VPN Gateway", icon: "network") {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Picker("Gateway Mode", selection: $settings.gatewayMode) {
-                            ForEach(AppSettings.GatewayMode.allCases, id: \.self) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        if settings.gatewayMode == .automatic {
-                            HStack {
-                                Text("Detected Gateway:")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.white.opacity(0.5))
-                                Text(settings.detectedGatewayIP.isEmpty ? "Detecting..." : settings.detectedGatewayIP)
-                                    .font(.system(size: 13, design: .monospaced))
-                                    .foregroundColor(Color(red: 0.4, green: 0.8, blue: 0.6))
-                                Spacer()
-                                Button { settings.detectGateway() } label: {
-                                    Image(systemName: "arrow.clockwise")
-                                        .foregroundColor(.white.opacity(0.4))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        } else {
-                            GlassTextField(placeholder: "e.g. 192.168.1.1", text: $settings.manualGatewayIP)
-                        }
-                    }
-                }
-
-                // DNS
-                SettingsSectionView(title: "DNS Resolution", icon: "server.rack") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("DNS Server for IP Resolution")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.5))
-                        GlassTextField(placeholder: "8.8.8.8", text: $settings.dnsServer)
-                    }
-                }
-
-                // Startup
-                SettingsSectionView(title: "Startup & Behavior", icon: "power") {
-                    VStack(alignment: .leading, spacing: 14) {
-                        GlassToggleRow(label: "Launch at system startup", isOn: $settings.runOnStartup)
-                        GlassToggleRow(label: "Apply active rules on launch", isOn: $settings.applyOnLaunch)
-                        GlassToggleRow(label: "Show in Dock", isOn: $settings.showInDock)
-                    }
-                }
-
-                // Save button
-                Button {
-                    settings.save()
-                } label: {
-                    Text("Save Settings")
-                        .font(.system(size: 14, weight: .semibold))
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("Settings")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(
-                            LinearGradient(
-                                colors: [Color(red: 0.2, green: 0.5, blue: 1.0), Color(red: 0.1, green: 0.35, blue: 0.85)],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                        .padding(.top, 28)
+
+                    // Gateway
+                    SettingsSectionView(title: "VPN Gateway", icon: "network") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Picker("Gateway Mode", selection: $settings.gatewayMode) {
+                                ForEach(AppSettings.GatewayMode.allCases, id: \.self) { mode in
+                                    Text(mode.rawValue).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            if settings.gatewayMode == .automatic {
+                                HStack {
+                                    Text("Detected Gateway:")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.5))
+                                    Text(settings.detectedGatewayIP.isEmpty ? "Detecting..." : settings.detectedGatewayIP)
+                                        .font(.system(size: 13, design: .monospaced))
+                                        .foregroundColor(Color(red: 0.4, green: 0.8, blue: 0.6))
+                                    Spacer()
+                                    Button { settings.detectGateway() } label: {
+                                        Image(systemName: "arrow.clockwise")
+                                            .foregroundColor(.white.opacity(0.4))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            } else {
+                                GlassTextField(placeholder: "e.g. 192.168.1.1", text: $settings.manualGatewayIP)
+                            }
+                        }
+                    }
+
+                    // DNS
+                    SettingsSectionView(title: "DNS Resolution", icon: "server.rack") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("DNS Server for IP Resolution")
+                                .font(.system(size: 12))
+                                .foregroundColor(.white.opacity(0.5))
+                            GlassTextField(placeholder: "8.8.8.8", text: $settings.dnsServer)
+                        }
+                    }
+
+                    // Startup
+                    SettingsSectionView(title: "Startup & Behavior", icon: "power") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            GlassToggleRow(label: "Launch at system startup", isOn: $settings.runOnStartup)
+                            GlassToggleRow(label: "Apply active rules on launch", isOn: $settings.applyOnLaunch)
+                            GlassToggleRow(label: "Show in Dock", isOn: $settings.showInDock)
+                        }
+                    }
+
+                    // Save button
+                    Button {
+                        settings.save()
+                    } label: {
+                        Text("Save Settings")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color(red: 0.2, green: 0.5, blue: 1.0), Color(red: 0.1, green: 0.35, blue: 0.85)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .shadow(color: .blue.opacity(0.4), radius: 8, y: 3)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .shadow(color: .blue.opacity(0.4), radius: 8, y: 3)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 28)
                 }
-                .buttonStyle(.plain)
-                .padding(.bottom, 28)
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
+
+            // ── Saved Toast ──
+            if showSavedToast {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Settings saved")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(red: 0.1, green: 0.18, blue: 0.12).opacity(0.95))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.green.opacity(0.35), lineWidth: 1)
+                        )
+                )
+                .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .padding(.bottom, 20)
+                .zIndex(10)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSavedToast)
+        .onReceive(NotificationCenter.default.publisher(for: .settingsSaved)) { _ in
+            withAnimation {
+                showSavedToast = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                withAnimation { showSavedToast = false }
+            }
         }
         .environmentObject(settings)
     }
@@ -864,7 +902,7 @@ struct AboutView: View {
 
                         HStack(spacing: 10) {
                             LinkButton(title: "Website", url: "https://amirhp.com/landing", icon: "globe")
-                            LinkButton(title: "GitHub", url: "https://github.com/amirhp-com/tunnelguard/", icon: "chevron.left.forwardslash.chevron.right")
+                            LinkButton(title: "GitHub", url: "https://github.com/amirhp-com", icon: "chevron.left.forwardslash.chevron.right")
                         }
                     }
                     .padding(16)
@@ -895,8 +933,8 @@ struct AboutView: View {
 
                 // Help & Links
                 HStack(spacing: 12) {
-                    LinkButton(title: "Documentation & Help", url: "https://github.com/amirhp-com/tunnelguard/", icon: "questionmark.circle", fullWidth: true)
-                    LinkButton(title: "Report Issue", url: "https://github.com/amirhp-com/tunnelguard/issues", icon: "ant.circle", fullWidth: true)
+                    LinkButton(title: "Documentation & Help", url: "https://amirhp.com/landing", icon: "questionmark.circle", fullWidth: true)
+                    LinkButton(title: "Report Issue", url: "https://github.com/amirhp-com", icon: "ant.circle", fullWidth: true)
                 }
 
                 // Copyleft
@@ -904,7 +942,7 @@ struct AboutView: View {
                     Text("© 2026 Amirhossein Hosseinpour · AmirhpCom")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.25))
-                    Text("Copyleft (c) — Free to use, modify, and distribute with attribution")
+                    Text("Copyleft 🄯 — Free to use, modify, and distribute with attribution")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.2))
                 }
