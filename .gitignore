@@ -1,0 +1,6 @@
+.build/
+*.xcuserdata/
+.swiftpm/
+DerivedData/
+*.resolved
+*.xcodeproj/project.xcworkspace/
