@@ -138,7 +138,7 @@
 		BBC9201B2F5A61CD00623AFD /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
+			buildActionMask = 12;
 			files = (
 			);
 			inputFileListPaths = (
@@ -152,7 +152,8 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Auto version & build number\nPLIST=\"${SRCROOT}/Info.plist\"\n\n# Build number = git commit count\nBUILD=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo \"1\")\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"$PLIST\"\n\n# Version from latest git tag\nTAG=$(git -C \"${SRCROOT}\" describe --tags --abbrev=0 2>/dev/null || echo \"\")\nif [ -n \"$TAG\" ]; then\n    VERSION=\"${TAG#v}\"\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString $VERSION\" \"$PLIST\"\nfi\n\necho \"Version: $(cat /dev/stdin 2>/dev/null || true) → $VERSION ($BUILD)\"\n";
+			shellScript = "# Bump in source\nBUILD=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleVersion\" \"${SRCROOT}/Info.plist\" 2>/dev/null || echo \"0\")\nif ! [[ \"$BUILD\" =~ ^[0-9]+$ ]]; then BUILD=0; fi\nBUILD=$((BUILD + 1))\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${SRCROOT}/Info.plist\"\n\n# Also bump in built product\nif [ -f \"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\" ]; then\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\nfi\n\necho \"Build number: $BUILD\"\n";
+			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -305,8 +306,9 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = DFDRW6TJH5;
 				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -339,8 +341,9 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = DFDRW6TJH5;
 				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;

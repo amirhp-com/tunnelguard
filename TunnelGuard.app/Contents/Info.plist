@@ -48,6 +48,8 @@
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>TunnelGuard needs administrator privileges to modify system routing table.</string>
 	<key>NSAppleScriptEnabled</key>
 	<false/>
 	<key>NSHighResolutionCapable</key>
