@@ -1,6 +1,18 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Bundle Version Helper
+struct BundleInfo {
+    static var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+    static var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    }
+    static var versionLabel: String { "v\(version)" }
+    static var fullLabel: String { "v\(version) (\(build))" }
+}
+
 // MARK: - Theme Environment
 private struct ThemeKey: EnvironmentKey {
     static let defaultValue: AppSettings.ThemeMode = .dark
@@ -183,7 +195,7 @@ struct SidebarView: View {
                 Text("TunnelGuard")
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .foregroundColor(colors.primaryText)
-                Text("v1.0.0")
+                Text(BundleInfo.fullLabel)
                     .font(.system(size: 10))
                     .foregroundColor(colors.secondaryText)
             }
@@ -1104,7 +1116,7 @@ struct AboutView: View {
                         Image(systemName: "shield.lefthalf.filled").font(.system(size: 36, weight: .semibold)).foregroundColor(.white)
                     }
                     Text("TunnelGuard").font(.system(size: 26, weight: .black, design: .rounded)).foregroundColor(colors.primaryText)
-                    Text("Version 1.0.0  ·  March 2026").font(.system(size: 12)).foregroundColor(colors.secondaryText)
+                    Text("Version \(BundleInfo.version) (Build \(BundleInfo.build))").font(.system(size: 12)).foregroundColor(colors.secondaryText)
                     Text("macOS VPN Split-Tunnel Manager").font(.system(size: 14)).foregroundColor(colors.secondaryText)
                 }
                 .padding(.top, 32)

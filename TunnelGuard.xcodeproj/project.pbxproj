@@ -11,6 +11,7 @@
 		A1000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* Models.swift */; };
 		A1000003 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003 /* Views.swift */; };
 		BBC920172F5A4B5600623AFD /* TunnelGuard.icns in Resources */ = {isa = PBXBuildFile; fileRef = BBC920162F5A4B5600623AFD /* TunnelGuard.icns */; };
+		BBC9201A2F5A60EC00623AFD /* Package.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC920192F5A60EC00623AFD /* Package.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +21,7 @@
 		A3000001 /* TunnelGuard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TunnelGuard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBC920112F5A493300623AFD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BBC920162F5A4B5600623AFD /* TunnelGuard.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = TunnelGuard.icns; sourceTree = "<group>"; };
+		BBC920192F5A60EC00623AFD /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -45,6 +47,7 @@
 		A5000002 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				BBC920192F5A60EC00623AFD /* Package.swift */,
 				A2000001 /* TunnelGuardApp.swift */,
 				A2000002 /* Models.swift */,
 				A2000003 /* Views.swift */,
@@ -138,6 +141,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BBC9201A2F5A60EC00623AFD /* Package.swift in Sources */,
 				A1000001 /* TunnelGuardApp.swift in Sources */,
 				A1000002 /* Models.swift in Sources */,
 				A1000003 /* Views.swift in Sources */,

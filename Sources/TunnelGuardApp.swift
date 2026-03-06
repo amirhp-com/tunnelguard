@@ -10,12 +10,22 @@ struct TunnelGuardApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 800, minHeight: 620)
+                .frame(width: 900, height: 620)
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
+                    // Lock window size and disable zoom/maximize
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if let win = NSApp.windows.first(where: { !($0 is NSPanel) }) {
+                            win.styleMask.remove(.resizable)
+                            win.standardWindowButton(.zoomButton)?.isEnabled = false
+                            win.setContentSize(NSSize(width: 900, height: 620))
+                            win.center()
+                        }
+                    }
                 }
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 900, height: 620)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
@@ -98,7 +108,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func showContextMenu() {
         let menu = NSMenu()
 
-        let header = NSMenuItem(title: "TunnelGuard v1.0.0", action: nil, keyEquivalent: "")
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        let header = NSMenuItem(title: "TunnelGuard v\(version) (\(build))", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())
@@ -132,6 +144,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
         if let win = mainWindow ?? NSApp.windows.first(where: { !($0 is NSPanel) }) {
+            win.styleMask.remove(.resizable)
+            win.standardWindowButton(.zoomButton)?.isEnabled = false
             win.makeKeyAndOrderFront(nil)
             mainWindow = win
         }

@@ -140,30 +140,39 @@ class AppSettings: ObservableObject {
 // MARK: - Privilege Helper
 struct PrivilegeHelper {
 
-    /// Run a command with admin privileges via AppleScript osascript.
-    /// Returns the output of the command.
+    /// Run a shell command with admin privileges via AppleScript's
+    /// `do shell script ... with administrator privileges`.
+    /// This triggers the macOS password dialog if needed.
+    /// Uses NSAppleScript directly to avoid shell-escaping issues.
     @discardableResult
     static func runAsAdmin(_ command: String) -> String {
-        // Escape double-quotes and backslashes for AppleScript string
         let escaped = command
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "do shell script \"\(escaped)\" with administrator privileges"
-        let result = shell("/usr/bin/osascript -e '\(script)' 2>&1")
-        return result
+        let source = "do shell script \"\(escaped)\" with administrator privileges"
+        var errorDict: NSDictionary?
+        let script = NSAppleScript(source: source)
+        let result = script?.executeAndReturnError(&errorDict)
+        if let error = errorDict {
+            let msg = error[NSAppleScript.errorMessage] as? String ?? "Unknown error"
+            return "Error: \(msg)"
+        }
+        return result?.stringValue ?? ""
     }
 
-    /// Run a route command with admin privileges (cached per session via helper).
-    /// First tries direct sudo (works if user has passwordless sudo or already auth'd),
-    /// then falls back to osascript prompt.
+    /// Run a single route command with admin privileges.
     @discardableResult
     static func runRoute(_ command: String) -> String {
-        // Try direct first (fast path if already elevated)
-        let direct = shell("sudo \(command) 2>&1")
-        if direct.contains("Operation not permitted") || direct.contains("Sorry, try again") || direct.contains("Password:") {
-            return runAsAdmin(command)
-        }
-        return direct
+        return runAsAdmin(command)
+    }
+
+    /// Run multiple commands in a single admin prompt (one password dialog).
+    /// Commands are joined with " && ".
+    @discardableResult
+    static func runBatchAsAdmin(_ commands: [String]) -> String {
+        guard !commands.isEmpty else { return "" }
+        let joined = commands.joined(separator: " && ")
+        return runAsAdmin(joined)
     }
 }
 
@@ -293,16 +302,53 @@ class RouteManager: ObservableObject {
     func applyAllActiveRules() {
         isApplying = true
         log("Applying all active rules...")
-        for rule in rules where rule.isEnabled {
-            applyRoutes(for: rule)
+        let gw = AppSettings.shared.effectiveGateway
+        guard !gw.isEmpty else {
+            log("⚠️ No gateway set")
+            isApplying = false
+            return
         }
+
+        // Collect all route-add commands for a single admin prompt
+        var commands: [String] = []
+        for rule in rules where rule.isEnabled {
+            for ip in rule.allIPs {
+                let cmd = "route -n add \(ip) \(gw) 2>&1"
+                commands.append(cmd)
+                logCommand("route -n add \(ip) \(gw)")
+            }
+        }
+
+        if commands.isEmpty {
+            log("No active rules with IPs to apply.")
+            isApplying = false
+            return
+        }
+
+        // Single password prompt for all commands
+        let result = PrivilegeHelper.runBatchAsAdmin(commands)
+        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            // Log each line of the batch output
+            for line in trimmed.components(separatedBy: "\n") {
+                let l = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !l.isEmpty { log("→ \(l)") }
+            }
+        }
+
         isApplying = false
         log("Done applying \(rules.filter { $0.isEnabled }.count) rules.")
     }
 
     func removeAllRoutes() {
+        var commands: [String] = []
         for rule in rules {
-            removeRoutes(for: rule)
+            for ip in rule.allIPs {
+                commands.append("route -n delete \(ip) 2>&1 || true")
+            }
+        }
+        if !commands.isEmpty {
+            PrivilegeHelper.runBatchAsAdmin(commands)
         }
         log("All routes removed.")
     }
@@ -310,19 +356,33 @@ class RouteManager: ObservableObject {
     private func applyRoutes(for rule: RouteRule) {
         let gw = AppSettings.shared.effectiveGateway
         guard !gw.isEmpty else { log("⚠️ No gateway set"); return }
+
+        var commands: [String] = []
         for ip in rule.allIPs {
-            let cmd = "route -n add \(ip) \(gw)"
-            logCommand(cmd)
-            let result = PrivilegeHelper.runRoute(cmd)
-            log("→ \(result.trimmingCharacters(in: .whitespacesAndNewlines))")
+            let cmd = "route -n add \(ip) \(gw) 2>&1"
+            commands.append(cmd)
+            logCommand("route -n add \(ip) \(gw)")
+        }
+
+        if !commands.isEmpty {
+            let result = PrivilegeHelper.runBatchAsAdmin(commands)
+            let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                for line in trimmed.components(separatedBy: "\n") {
+                    let l = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !l.isEmpty { log("→ \(l)") }
+                }
+            }
         }
     }
 
     private func removeRoutes(for rule: RouteRule) {
+        var commands: [String] = []
         for ip in rule.allIPs {
-            let cmd = "route -n delete \(ip)"
-            logCommand(cmd)
-            PrivilegeHelper.runRoute(cmd)
+            commands.append("route -n delete \(ip) 2>&1 || true")
+        }
+        if !commands.isEmpty {
+            PrivilegeHelper.runBatchAsAdmin(commands)
         }
     }
 
