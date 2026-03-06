@@ -40,5 +40,7 @@
     <false/>
     <key>com.apple.security.network.client</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>TunnelGuard needs administrator privileges to modify system routing table.</string>
 </dict>
 </plist>

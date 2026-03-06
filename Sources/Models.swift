@@ -140,24 +140,44 @@ class AppSettings: ObservableObject {
 // MARK: - Privilege Helper
 struct PrivilegeHelper {
 
-    /// Run a shell command with admin privileges via AppleScript's
-    /// `do shell script ... with administrator privileges`.
-    /// This triggers the macOS password dialog if needed.
-    /// Uses NSAppleScript directly to avoid shell-escaping issues.
+    /// Run a shell command with admin privileges via `/usr/bin/osascript`.
+    /// This triggers the macOS password dialog.
+    /// Uses Process directly to avoid sandbox restrictions with NSAppleScript.
     @discardableResult
     static func runAsAdmin(_ command: String) -> String {
         let escaped = command
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-        let source = "do shell script \"\(escaped)\" with administrator privileges"
-        var errorDict: NSDictionary?
-        let script = NSAppleScript(source: source)
-        let result = script?.executeAndReturnError(&errorDict)
-        if let error = errorDict {
-            let msg = error[NSAppleScript.errorMessage] as? String ?? "Unknown error"
+        let appleScript = "do shell script \"\(escaped)\" with administrator privileges"
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", appleScript]
+
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return "Error: \(error.localizedDescription)"
+        }
+
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        let stdout = String(data: outData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if process.terminationStatus != 0 {
+            // User cancelled or auth failed
+            let msg = stderr.isEmpty ? "Unknown error (exit \(process.terminationStatus))" : stderr
             return "Error: \(msg)"
         }
-        return result?.stringValue ?? ""
+
+        return stdout
     }
 
     /// Run a single route command with admin privileges.
