@@ -82,6 +82,9 @@ struct ContentView: View {
     @State private var showApplyToast = false
     @State private var applyToastMessage = ""
     @State private var applyToastIsError = false
+    @State private var showRefreshToast = false
+    @State private var refreshToastMessage = ""
+    @State private var refreshToastIsError = false
 
     enum AppTab: String, CaseIterable {
         case rules    = "Rules"
@@ -172,14 +175,13 @@ struct ContentView: View {
         .environmentObject(settings)
         .preferredColorScheme(settings.themeMode == .dark ? .dark : settings.themeMode == .light ? .light : nil)
         .modifier(ToastOverlay(
-            message: applyToastMessage,
-            icon: applyToastIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
-            iconColor: applyToastIsError ? colors.accentOrange : colors.accentGreen,
-            isShowing: showApplyToast,
+            message: showRefreshToast ? refreshToastMessage : applyToastMessage,
+            icon: (showRefreshToast ? refreshToastIsError : applyToastIsError) ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+            iconColor: (showRefreshToast ? refreshToastIsError : applyToastIsError) ? colors.accentOrange : colors.accentGreen,
+            isShowing: showApplyToast || showRefreshToast,
             colors: colors
         ))
         .onChange(of: routeManager.isApplying) { applying in
-            // When applying finishes, check the result
             if !applying {
                 switch routeManager.applyResult {
                 case .success(let count):
@@ -195,6 +197,22 @@ struct ContentView: View {
                 case .none:
                     break
                 }
+            }
+        }
+        .onChange(of: routeManager.refreshResult) { result in
+            switch result {
+            case .success(let domain, let count):
+                refreshToastMessage = "\(domain) → \(count) IP\(count == 1 ? "" : "s") resolved"
+                refreshToastIsError = false
+                withAnimation { showRefreshToast = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { withAnimation { showRefreshToast = false } }
+            case .error(let msg):
+                refreshToastMessage = msg
+                refreshToastIsError = true
+                withAnimation { showRefreshToast = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { withAnimation { showRefreshToast = false } }
+            case .none:
+                break
             }
         }
     }

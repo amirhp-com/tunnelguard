@@ -266,6 +266,9 @@ class RouteManager: ObservableObject {
     /// Result of last apply operation for toast display
     enum ApplyResult { case success(Int), error(String), none }
     @Published var applyResult: ApplyResult = .none
+    /// Result of last refresh for toast display
+    enum RefreshResult: Equatable { case success(String, Int), error(String), none }
+    @Published var refreshResult: RefreshResult = .none
 
     private let rulesKey = "TunnelGuardRules"
 
@@ -360,11 +363,15 @@ class RouteManager: ObservableObject {
         await MainActor.run {
             if ips.isEmpty {
                 lastError = "Could not resolve \(rule.domain)"
+                refreshResult = .error("Could not resolve \(rule.domain)")
                 log("⚠️ Resolution failed for \(rule.domain)")
                 if !debugOutput.isEmpty {
                     log("   output: \(debugOutput)")
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self.lastError = nil }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                    self.lastError = nil
+                    self.refreshResult = .none
+                }
             } else {
                 lastError = nil
                 rules[idx].resolvedIPs = ips
@@ -373,7 +380,11 @@ class RouteManager: ObservableObject {
                     applyRoutes(for: rules[idx])
                 }
                 saveRules()
+                refreshResult = .success(rule.domain, ips.count)
                 log("Refreshed IPs for \(rule.domain) → \(ips.joined(separator: ", "))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.refreshResult = .none
+                }
             }
         }
     }
