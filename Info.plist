@@ -2,45 +2,45 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
-	<key>CFBundleDisplayName</key>
-	<string>TunnelGuard</string>
-	<key>CFBundleExecutable</key>
-	<string>TunnelGuard</string>
-	<key>CFBundleIconFile</key>
-	<string>TunnelGuard</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.amirhpcom.tunnelguard</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>TunnelGuard</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.4.0</string>
-	<key>CFBundleVersion</key>
-	<string>2</string>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.utilities</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>TunnelGuard needs administrator privileges to modify system routing table.</string>
-	<key>NSAppleScriptEnabled</key>
-	<false/>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 Amirhossein Hosseinpour (Amirhp.Com), All rights reserved.</string>
-	<key>NSMainStoryboardFile</key>
-	<string></string>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
-	<key>NSSupportsAutomaticGraphicsSwitching</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
+<key>CFBundleIconFile</key>
+<string>TunnelGuard</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>TunnelGuard</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.amirhpcom.tunnelguard</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>TunnelGuard</string>
+    <key>CFBundleDisplayName</key>
+    <string>TunnelGuard</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSMainStoryboardFile</key>
+    <string></string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 Amirhossein Hosseinpour (Amirhp.Com), All rights reserved.</string>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>NSAppleScriptEnabled</key>
+    <false/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>TunnelGuard needs administrator privileges to modify system routing table.</string>
 </dict>
 </plist>
