@@ -79,7 +79,6 @@
 				A7000002 /* Resources */,
 				A7000001 /* Sources */,
 				A4000001 /* Frameworks */,
-				BBC9201B2F5A61CD00623AFD /* Run Script */,
 			);
 			buildRules = (
 			);
@@ -133,29 +132,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		BBC9201B2F5A61CD00623AFD /* Run Script */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 12;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Run Script";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Bump in source\nBUILD=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleVersion\" \"${SRCROOT}/Info.plist\" 2>/dev/null || echo \"0\")\nif ! [[ \"$BUILD\" =~ ^[0-9]+$ ]]; then BUILD=0; fi\nBUILD=$((BUILD + 1))\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${SRCROOT}/Info.plist\"\n\n# Patch the built app bundle too\nAPP_PLIST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Info.plist\"\nif [ -f \"$APP_PLIST\" ]; then\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"$APP_PLIST\"\nfi\n\necho \"Build number: $BUILD\"\n";
-			showEnvVarsInLog = 0;
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A7000001 /* Sources */ = {
@@ -304,7 +280,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 45;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = DFDRW6TJH5;
 				ENABLE_APP_SANDBOX = YES;
@@ -321,7 +297,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.amirhpcom.tunnelguard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -339,7 +315,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 45;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = DFDRW6TJH5;
 				ENABLE_APP_SANDBOX = YES;
@@ -356,7 +332,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.amirhpcom.tunnelguard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
