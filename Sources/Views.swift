@@ -79,6 +79,9 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .rules
     @State private var showAddSheet = false
     @State private var editingRule: RouteRule? = nil
+    @State private var showApplyToast = false
+    @State private var applyToastMessage = ""
+    @State private var applyToastIsError = false
 
     enum AppTab: String, CaseIterable {
         case rules    = "Rules"
@@ -168,6 +171,32 @@ struct ContentView: View {
         .environmentObject(routeManager)
         .environmentObject(settings)
         .preferredColorScheme(settings.themeMode == .dark ? .dark : settings.themeMode == .light ? .light : nil)
+        .modifier(ToastOverlay(
+            message: applyToastMessage,
+            icon: applyToastIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+            iconColor: applyToastIsError ? colors.accentOrange : colors.accentGreen,
+            isShowing: showApplyToast,
+            colors: colors
+        ))
+        .onChange(of: routeManager.isApplying) { applying in
+            // When applying finishes, check the result
+            if !applying {
+                switch routeManager.applyResult {
+                case .success(let count):
+                    applyToastMessage = "\(count) rule\(count == 1 ? "" : "s") applied successfully"
+                    applyToastIsError = false
+                    withAnimation { showApplyToast = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { withAnimation { showApplyToast = false } }
+                case .error(let msg):
+                    applyToastMessage = msg
+                    applyToastIsError = true
+                    withAnimation { showApplyToast = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { withAnimation { showApplyToast = false } }
+                case .none:
+                    break
+                }
+            }
+        }
     }
 }
 
@@ -901,6 +930,8 @@ struct SettingsView: View {
     @StateObject private var settings = AppSettings.shared
     let colors: TGColors
     @State private var showSavedToast = false
+    @State private var adminGranted = PrivilegeHelper.isAdminGranted()
+    @State private var adminStatusMsg: String? = nil
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -986,6 +1017,74 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 14) {
                             GlassToggleRow(label: "Launch at system startup", isOn: $settings.runOnStartup, colors: colors)
                             GlassToggleRow(label: "Apply active rules on launch", isOn: $settings.applyOnLaunch, colors: colors)
+                        }
+                    }
+
+                    // Admin Access
+                    SettingsSectionView(title: "Admin Access", icon: "lock.shield", colors: colors) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(adminGranted ? colors.accentGreen : colors.accentOrange)
+                                            .frame(width: 7, height: 7)
+                                        Text(adminGranted ? "Admin access granted" : "Admin access not granted")
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(colors.primaryText.opacity(0.85))
+                                    }
+                                    Text(adminGranted
+                                         ? "Route commands run without password prompts."
+                                         : "You'll be prompted for your password each time routes are applied.")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(colors.secondaryText)
+                                }
+                                Spacer()
+                                Button {
+                                    if adminGranted {
+                                        let (ok, msg) = PrivilegeHelper.revokeAdmin()
+                                        adminGranted = !ok
+                                        adminStatusMsg = msg
+                                    } else {
+                                        let (ok, msg) = PrivilegeHelper.grantAdmin()
+                                        adminGranted = ok
+                                        adminStatusMsg = msg
+                                    }
+                                    // Clear status after a few seconds
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { adminStatusMsg = nil }
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: adminGranted ? "lock.open.fill" : "lock.fill")
+                                            .font(.system(size: 11))
+                                        Text(adminGranted ? "Revoke" : "Grant Access")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(
+                                        LinearGradient(
+                                            colors: adminGranted
+                                                ? [colors.accentOrange, colors.accentRed]
+                                                : [Color(hex:"3b82f6"), Color(hex:"1d4ed8")],
+                                            startPoint: .leading, endPoint: .trailing
+                                        )
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if let msg = adminStatusMsg {
+                                Text(msg)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(msg.contains("Error") ? colors.accentRed : colors.accentGreen)
+                                    .transition(.opacity)
+                            }
+
+                            Text("This adds a sudoers entry for /sbin/route so TunnelGuard can modify routes without prompting. You can revoke it at any time.")
+                                .font(.system(size: 11))
+                                .foregroundColor(colors.secondaryText.opacity(0.7))
+                                .lineSpacing(3)
                         }
                     }
 

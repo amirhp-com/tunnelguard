@@ -174,6 +174,41 @@ struct PrivilegeHelper {
         let joined = commands.joined(separator: " && ")
         return runAsAdmin(joined)
     }
+
+    // MARK: - Passwordless sudo for route command
+
+    private static let sudoersFile = "/etc/sudoers.d/tunnelguard"
+
+    /// Check if passwordless sudo is currently configured for route.
+    static func isAdminGranted() -> Bool {
+        return FileManager.default.fileExists(atPath: sudoersFile)
+    }
+
+    /// Grant passwordless sudo for /sbin/route to the current user.
+    /// This creates a sudoers.d entry so route commands no longer need a password.
+    /// Returns (success, message).
+    static func grantAdmin() -> (Bool, String) {
+        let user = NSUserName()
+        // sudoers line: allow this user to run /sbin/route without password
+        let line = "\(user) ALL=(ALL) NOPASSWD: /sbin/route"
+        // We need admin to write to /etc/sudoers.d/
+        let cmd = "echo '\(line)' > \(sudoersFile) && chmod 0440 \(sudoersFile) && chown root:wheel \(sudoersFile)"
+        let result = runAsAdmin(cmd)
+        if result.contains("Error:") {
+            return (false, result)
+        }
+        return (true, "Admin access granted for route commands")
+    }
+
+    /// Revoke the passwordless sudo entry.
+    static func revokeAdmin() -> (Bool, String) {
+        let cmd = "rm -f \(sudoersFile)"
+        let result = runAsAdmin(cmd)
+        if result.contains("Error:") {
+            return (false, result)
+        }
+        return (true, "Admin access revoked")
+    }
 }
 
 // MARK: - Route Manager
@@ -187,6 +222,9 @@ class RouteManager: ObservableObject {
     @Published var lastError: String? = nil
     /// Rule pending delete confirmation
     @Published var ruleToDelete: RouteRule? = nil
+    /// Result of last apply operation for toast display
+    enum ApplyResult { case success(Int), error(String), none }
+    @Published var applyResult: ApplyResult = .none
 
     private let rulesKey = "TunnelGuardRules"
 
@@ -301,11 +339,13 @@ class RouteManager: ObservableObject {
 
     func applyAllActiveRules() {
         isApplying = true
+        applyResult = .none
         log("Applying all active rules...")
         let gw = AppSettings.shared.effectiveGateway
         guard !gw.isEmpty else {
             log("⚠️ No gateway set")
             isApplying = false
+            applyResult = .error("No gateway configured")
             return
         }
 
@@ -322,22 +362,32 @@ class RouteManager: ObservableObject {
         if commands.isEmpty {
             log("No active rules with IPs to apply.")
             isApplying = false
+            applyResult = .error("No active rules with IPs")
             return
         }
 
-        // Single password prompt for all commands
-        let result = PrivilegeHelper.runBatchAsAdmin(commands)
+        // Single password prompt for all commands (or direct sudo if granted)
+        let result = runElevatedBatch(commands)
         let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasError = trimmed.contains("Error:") || trimmed.contains("error") || trimmed.contains("not permitted")
+
         if !trimmed.isEmpty {
-            // Log each line of the batch output
             for line in trimmed.components(separatedBy: "\n") {
                 let l = line.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !l.isEmpty { log("→ \(l)") }
             }
         }
 
+        let count = rules.filter { $0.isEnabled }.count
         isApplying = false
-        log("Done applying \(rules.filter { $0.isEnabled }.count) rules.")
+
+        if hasError {
+            applyResult = .error("Some routes failed — check log")
+            log("⚠️ Completed with errors.")
+        } else {
+            applyResult = .success(count)
+            log("Done applying \(count) rules.")
+        }
     }
 
     func removeAllRoutes() {
@@ -348,7 +398,7 @@ class RouteManager: ObservableObject {
             }
         }
         if !commands.isEmpty {
-            PrivilegeHelper.runBatchAsAdmin(commands)
+            runElevatedBatch(commands)
         }
         log("All routes removed.")
     }
@@ -365,7 +415,7 @@ class RouteManager: ObservableObject {
         }
 
         if !commands.isEmpty {
-            let result = PrivilegeHelper.runBatchAsAdmin(commands)
+            let result = runElevatedBatch(commands)
             let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 for line in trimmed.components(separatedBy: "\n") {
@@ -382,7 +432,20 @@ class RouteManager: ObservableObject {
             commands.append("route -n delete \(ip) 2>&1 || true")
         }
         if !commands.isEmpty {
-            PrivilegeHelper.runBatchAsAdmin(commands)
+            runElevatedBatch(commands)
+        }
+    }
+
+    /// Smart batch execution: uses direct `sudo` if admin is granted, otherwise osascript prompt.
+    @discardableResult
+    private func runElevatedBatch(_ commands: [String]) -> String {
+        if PrivilegeHelper.isAdminGranted() {
+            // Admin granted — use direct sudo (no password dialog)
+            let sudoCommands = commands.map { "sudo \($0)" }
+            let joined = sudoCommands.joined(separator: " && ")
+            return shell(joined)
+        } else {
+            return PrivilegeHelper.runBatchAsAdmin(commands)
         }
     }
 
