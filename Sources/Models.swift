@@ -6,12 +6,18 @@ struct RouteRule: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var domain: String
     var resolvedIPs: [String] = []
+    var manualIPs: [String] = []       // manually-entered IPs
     var isEnabled: Bool = true
     var lastResolved: Date?
     var notes: String = ""
 
     var displayDomain: String { domain.isEmpty ? "Unknown" : domain }
     var statusLabel: String { isEnabled ? "Active" : "Paused" }
+
+    /// All IPs: resolved + manual, deduplicated
+    var allIPs: [String] {
+        Array(Set(resolvedIPs + manualIPs)).sorted()
+    }
 }
 
 // MARK: - App Settings
@@ -80,13 +86,11 @@ class AppSettings: ObservableObject {
         UserDefaults.standard.set(data, forKey: settingsKey)
         updateLoginItem()
 
-        // Apply dock/menubar visibility immediately
         NotificationCenter.default.post(
             name: .dockVisibilityChanged,
             object: nil,
             userInfo: ["show": showInDock, "presenceMode": presenceMode.rawValue]
         )
-        // Signal UI to show a save confirmation toast
         NotificationCenter.default.post(name: .settingsSaved, object: nil)
     }
 
@@ -103,7 +107,6 @@ class AppSettings: ObservableObject {
     }
 
     private func updateLoginItem() {
-        // LaunchAgent plist management for startup
         let plistPath = "\(NSHomeDirectory())/Library/LaunchAgents/com.amirhpcom.tunnelguard.plist"
         if runOnStartup {
             let bundlePath = Bundle.main.bundlePath
@@ -134,6 +137,36 @@ class AppSettings: ObservableObject {
     }
 }
 
+// MARK: - Privilege Helper
+struct PrivilegeHelper {
+
+    /// Run a command with admin privileges via AppleScript osascript.
+    /// Returns the output of the command.
+    @discardableResult
+    static func runAsAdmin(_ command: String) -> String {
+        // Escape double-quotes and backslashes for AppleScript string
+        let escaped = command
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = "do shell script \"\(escaped)\" with administrator privileges"
+        let result = shell("/usr/bin/osascript -e '\(script)' 2>&1")
+        return result
+    }
+
+    /// Run a route command with admin privileges (cached per session via helper).
+    /// First tries direct sudo (works if user has passwordless sudo or already auth'd),
+    /// then falls back to osascript prompt.
+    @discardableResult
+    static func runRoute(_ command: String) -> String {
+        // Try direct first (fast path if already elevated)
+        let direct = shell("sudo \(command) 2>&1")
+        if direct.contains("Operation not permitted") || direct.contains("Sorry, try again") || direct.contains("Password:") {
+            return runAsAdmin(command)
+        }
+        return direct
+    }
+}
+
 // MARK: - Route Manager
 class RouteManager: ObservableObject {
     static let shared = RouteManager()
@@ -142,7 +175,9 @@ class RouteManager: ObservableObject {
     @Published var isApplying: Bool = false
     @Published var lastActionLog: [String] = []
     @Published var activeRulesCount: Int = 0
-    @Published var lastError: String? = nil   // brief message shown in UI
+    @Published var lastError: String? = nil
+    /// Rule pending delete confirmation
+    @Published var ruleToDelete: RouteRule? = nil
 
     private let rulesKey = "TunnelGuardRules"
 
@@ -165,14 +200,14 @@ class RouteManager: ObservableObject {
         activeRulesCount = rules.filter { $0.isEnabled }.count
     }
 
-    func addRule(domain: String, notes: String = "") async -> RouteRule? {
+    func addRule(domain: String, notes: String = "", manualIPs: [String] = []) async -> RouteRule? {
         let trimmed = domain.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")
             .replacingOccurrences(of: "www.", with: "")
         guard !trimmed.isEmpty else { return nil }
 
-        var rule = RouteRule(domain: trimmed, notes: notes)
+        var rule = RouteRule(domain: trimmed, manualIPs: manualIPs, notes: notes)
         let (ips, debugOutput) = await resolveIPsDetailed(for: trimmed)
         rule.resolvedIPs = ips
         rule.lastResolved = Date()
@@ -180,21 +215,32 @@ class RouteManager: ObservableObject {
         await MainActor.run {
             rules.append(rule)
             saveRules()
-            if ips.isEmpty {
+            if ips.isEmpty && manualIPs.isEmpty {
                 log("⚠️ No IPs found for \(trimmed)")
-                if !debugOutput.isEmpty { log("   dig output: \(debugOutput)") }
+                if !debugOutput.isEmpty { log("   output: \(debugOutput)") }
             } else {
-                log("Added rule for \(trimmed) → \(ips.joined(separator: ", "))")
+                log("Added rule for \(trimmed) → \(rule.allIPs.joined(separator: ", "))")
             }
         }
         return rule
     }
 
+    /// Request deletion — caller should set ruleToDelete and show confirmation
+    func confirmRemoveRule(_ rule: RouteRule) {
+        ruleToDelete = rule
+    }
+
+    /// Actually remove after confirmation
     func removeRule(_ rule: RouteRule) {
         removeRoutes(for: rule)
         rules.removeAll { $0.id == rule.id }
         saveRules()
         log("Removed rule for \(rule.domain)")
+        ruleToDelete = nil
+    }
+
+    func cancelDelete() {
+        ruleToDelete = nil
     }
 
     func toggleRule(_ rule: RouteRule) {
@@ -209,17 +255,26 @@ class RouteManager: ObservableObject {
         log("\(rules[idx].isEnabled ? "Enabled" : "Disabled") rule for \(rule.domain)")
     }
 
+    /// Update rule fields (domain, notes, manualIPs)
+    func updateRule(_ rule: RouteRule, newDomain: String? = nil, newNotes: String? = nil, newManualIPs: [String]? = nil) {
+        guard let idx = rules.firstIndex(where: { $0.id == rule.id }) else { return }
+        if let d = newDomain { rules[idx].domain = d }
+        if let n = newNotes { rules[idx].notes = n }
+        if let ips = newManualIPs { rules[idx].manualIPs = ips }
+        saveRules()
+        log("Updated rule for \(rules[idx].domain)")
+    }
+
     func refreshIPs(for rule: RouteRule) async {
         guard let idx = rules.firstIndex(where: { $0.id == rule.id }) else { return }
         removeRoutes(for: rule)
         let (ips, debugOutput) = await resolveIPsDetailed(for: rule.domain)
         await MainActor.run {
             if ips.isEmpty {
-                // Clean message on the UI badge; full dig output goes to log only
                 lastError = "Could not resolve \(rule.domain)"
                 log("⚠️ Resolution failed for \(rule.domain)")
                 if !debugOutput.isEmpty {
-                    log("   dig output: \(debugOutput)")
+                    log("   output: \(debugOutput)")
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self.lastError = nil }
             } else {
@@ -255,28 +310,63 @@ class RouteManager: ObservableObject {
     private func applyRoutes(for rule: RouteRule) {
         let gw = AppSettings.shared.effectiveGateway
         guard !gw.isEmpty else { log("⚠️ No gateway set"); return }
-        for ip in rule.resolvedIPs {
-            let result = shell("sudo route -n add \(ip) \(gw) 2>&1")
-            log("route add \(ip) via \(gw): \(result.trimmingCharacters(in: .whitespacesAndNewlines))")
+        for ip in rule.allIPs {
+            let cmd = "route -n add \(ip) \(gw)"
+            logCommand(cmd)
+            let result = PrivilegeHelper.runRoute(cmd)
+            log("→ \(result.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
     }
 
     private func removeRoutes(for rule: RouteRule) {
-        for ip in rule.resolvedIPs {
-            shell("sudo route -n delete \(ip) 2>&1")
+        for ip in rule.allIPs {
+            let cmd = "route -n delete \(ip)"
+            logCommand(cmd)
+            PrivilegeHelper.runRoute(cmd)
         }
     }
 
-    /// Returns (IPs, rawDigOutput). IPs is empty on failure; rawDigOutput has the debug info.
+    /// Resolve IPs using the configured DNS server to avoid sandbox/bind errors.
+    /// Falls back to nslookup if dig fails.
     func resolveIPsDetailed(for domain: String) async -> ([String], String) {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let raw = shell("dig +short \(domain) A 2>&1")
-                let ips = raw.components(separatedBy: "\n")
+                let dns = AppSettings.shared.dnsServer.isEmpty ? "8.8.8.8" : AppSettings.shared.dnsServer
+
+                // Try dig first with explicit server to avoid bind() errors
+                let digCmd = "dig @\(dns) +short +time=5 +tries=2 \(domain) A 2>&1"
+                self.logCommand(digCmd)
+                let raw = shell(digCmd)
+
+                var ips = raw.components(separatedBy: "\n")
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty && $0.allSatisfy({ $0.isNumber || $0 == "." }) && $0.contains(".") }
-                // Keep raw output for the log but strip it from the UI
+                    .filter { Self.isValidIPv4($0) }
+
                 let debugLine = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // If dig failed (bind error, etc.), fall back to nslookup
+                if ips.isEmpty && (raw.contains("bind:") || raw.contains("Operation not permitted") || raw.contains("connection timed out")) {
+                    let nsCmd = "nslookup \(domain) \(dns) 2>&1"
+                    self.logCommand(nsCmd)
+                    let nsRaw = shell(nsCmd)
+                    // Parse nslookup output: lines after "Name:" containing "Address:"
+                    var foundAnswer = false
+                    for line in nsRaw.components(separatedBy: "\n") {
+                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.hasPrefix("Name:") { foundAnswer = true; continue }
+                        if foundAnswer && trimmed.hasPrefix("Address:") {
+                            let ip = trimmed.replacingOccurrences(of: "Address:", with: "")
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                                .components(separatedBy: "#").first?
+                                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            if Self.isValidIPv4(ip) { ips.append(ip) }
+                        }
+                    }
+                    let nsDebug = nsRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    continuation.resume(returning: (ips, ips.isEmpty ? nsDebug : debugLine))
+                    return
+                }
+
                 continuation.resume(returning: (ips, debugLine))
             }
         }
@@ -287,9 +377,31 @@ class RouteManager: ObservableObject {
         return ips
     }
 
-    private func log(_ message: String) {
+    private static func isValidIPv4(_ s: String) -> Bool {
+        let parts = s.components(separatedBy: ".")
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { part in
+            guard let n = Int(part), n >= 0, n <= 255 else { return false }
+            return true
+        }
+    }
+
+    func log(_ message: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let entry = "[\(timestamp)] \(message)"
+        DispatchQueue.main.async {
+            self.lastActionLog.append(entry)
+            if self.lastActionLog.count > 200 {
+                self.lastActionLog.removeFirst()
+            }
+        }
+        print(entry)
+    }
+
+    /// Log a command (prefixed with CMD: for purple coloring in LogsView)
+    private func logCommand(_ command: String) {
+        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        let entry = "[\(timestamp)] CMD: \(command)"
         DispatchQueue.main.async {
             self.lastActionLog.append(entry)
             if self.lastActionLog.count > 200 {

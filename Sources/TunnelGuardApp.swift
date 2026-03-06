@@ -28,6 +28,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // ── Single-instance enforcement ──
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.amirhpcom.tunnelguard"
+        let running = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleIdentifier == bundleID
+        }
+        if running.count > 1 {
+            // Another instance is already running — activate it and quit this one
+            if let other = running.first(where: { $0 != NSRunningApplication.current }) {
+                other.activate()
+            }
+            NSApp.terminate(nil)
+            return
+        }
+
         setupMenuBarItem()
         RouteManager.shared.loadRules()
 
@@ -112,7 +126,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)
-        // Clear menu so left-click stays as showMainWindow
         DispatchQueue.main.async { self.statusItem?.menu = nil }
     }
 
