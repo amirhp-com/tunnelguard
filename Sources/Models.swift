@@ -26,6 +26,7 @@ class AppSettings: ObservableObject {
     @Published var dnsServer: String = "8.8.8.8"
     @Published var showInDock: Bool = true
     @Published var themeMode: ThemeMode = .system
+    @Published var presenceMode: PresenceMode = .both
 
     enum GatewayMode: String, CaseIterable, Codable {
         case automatic = "Automatic"
@@ -36,6 +37,12 @@ class AppSettings: ObservableObject {
         case system = "System"
         case light = "Light"
         case dark = "Dark"
+    }
+
+    enum PresenceMode: String, CaseIterable, Codable {
+        case menuBarOnly  = "Menu Bar Only"
+        case dockOnly     = "Dock Only"
+        case both         = "Both"
     }
 
     var effectiveGateway: String {
@@ -67,16 +74,17 @@ class AppSettings: ObservableObject {
             "applyOnLaunch": applyOnLaunch,
             "dnsServer": dnsServer,
             "showInDock": showInDock,
-            "themeMode": themeMode.rawValue
+            "themeMode": themeMode.rawValue,
+            "presenceMode": presenceMode.rawValue
         ]
         UserDefaults.standard.set(data, forKey: settingsKey)
         updateLoginItem()
 
-        // Apply dock visibility immediately
+        // Apply dock/menubar visibility immediately
         NotificationCenter.default.post(
             name: .dockVisibilityChanged,
             object: nil,
-            userInfo: ["show": showInDock]
+            userInfo: ["show": showInDock, "presenceMode": presenceMode.rawValue]
         )
         // Signal UI to show a save confirmation toast
         NotificationCenter.default.post(name: .settingsSaved, object: nil)
@@ -91,6 +99,7 @@ class AppSettings: ObservableObject {
         dnsServer = data["dnsServer"] as? String ?? "8.8.8.8"
         showInDock = data["showInDock"] as? Bool ?? true
         if let tm = data["themeMode"] as? String { themeMode = ThemeMode(rawValue: tm) ?? .system }
+        if let pm = data["presenceMode"] as? String { presenceMode = PresenceMode(rawValue: pm) ?? .both }
     }
 
     private func updateLoginItem() {

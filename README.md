@@ -3,8 +3,11 @@
 **macOS VPN Split-Tunnel Manager** — Exclude specific domains from your VPN tunnel with a clean, native macOS interface.
 
 > Version 1.0.0 · Released 2026-03-06 | 1404-12-15
+>
 > Developer: [Amirhossein Hosseinpour (AmirhpCom)](https://amirhp.com/landing)
+>
 > GitHub: [github.com/amirhp-com](https://github.com/amirhp-com/tunnelguard)
+>
 > Inspired by: [a post on dev.to by @vavilov2212](https://dev.to/vavilov2212/routing-only-specific-subnets-through-vpn-split-tunneling-on-macos-2aig)
 
 ---
@@ -274,7 +277,7 @@ This tool is intended for **advanced users** who understand network routing. Alw
 ## License
 
 ```
-Copyleft (c) 2026 Amirhossein Hosseinpour (AmirhpCom)
+Copyleft (c) 2026 Amirhossein Hosseinpour (Amirhp.Com)
 
 This work is free. You can redistribute it and/or modify it under the
 terms of the Do What The Fuck You Want To Public License, Version 2,

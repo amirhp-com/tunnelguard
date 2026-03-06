@@ -1,4 +1,54 @@
 import SwiftUI
+import AppKit
+
+// MARK: - Theme Environment
+private struct ThemeKey: EnvironmentKey {
+    static let defaultValue: AppSettings.ThemeMode = .dark
+}
+extension EnvironmentValues {
+    var themeMode: AppSettings.ThemeMode {
+        get { self[ThemeKey.self] }
+        set { self[ThemeKey.self] = newValue }
+    }
+}
+
+// MARK: - Theme Colors
+struct TGColors {
+    let isDark: Bool
+
+    var background: Color        { isDark ? Color(hex: "0d1117") : Color(hex: "f0f2f5") }
+    var sidebarBg: Color         { isDark ? Color(hex: "0a0e15").opacity(0.6) : Color(hex: "e8eaf0").opacity(0.7) }
+    var panelBg: Color           { isDark ? Color.white.opacity(0.04) : Color.white.opacity(0.65) }
+    var panelBorder: Color       { isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07) }
+    var primaryText: Color       { isDark ? Color.white : Color(hex: "1a1a2e") }
+    var secondaryText: Color     { isDark ? Color.white.opacity(0.45) : Color(hex: "1a1a2e").opacity(0.5) }
+    var accentBlue: Color        { Color(hex: "3b82f6") }
+    var accentGreen: Color       { isDark ? Color(hex: "34d399") : Color(hex: "059669") }
+    var accentOrange: Color      { Color(hex: "f59e0b") }
+    var accentRed: Color         { Color(hex: "ef4444") }
+    var glassOverlay: Color      { isDark ? Color.white.opacity(0.03) : Color.white.opacity(0.5) }
+    var divider: Color           { isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.08) }
+    var rowHover: Color          { isDark ? Color.white.opacity(0.04) : Color.black.opacity(0.03) }
+    var inputBg: Color           { isDark ? Color.white.opacity(0.07) : Color.white.opacity(0.8) }
+    var inputBorder: Color       { isDark ? Color.white.opacity(0.1) : Color.black.opacity(0.12) }
+    var selectedNavBg: Color     { isDark ? Color.white.opacity(0.10) : Color(hex: "3b82f6").opacity(0.12) }
+    var selectedNavBorder: Color { isDark ? Color(hex: "3b82f6").opacity(0.3) : Color(hex: "3b82f6").opacity(0.4) }
+    var toastBg: Color           { isDark ? Color(hex: "111827").opacity(0.95) : Color.white.opacity(0.95) }
+    var logText: NSColor         { isDark ? NSColor(red:0.35,green:0.85,blue:0.6,alpha:1) : NSColor(red:0.05,green:0.45,blue:0.25,alpha:1) }
+}
+
+extension Color {
+    init(hex: String) {
+        let h = hex.trimmingCharacters(in: .init(charactersIn: "#"))
+        var val: UInt64 = 0
+        Scanner(string: h).scanHexInt64(&val)
+        self.init(
+            red: Double((val >> 16) & 0xFF)/255,
+            green: Double((val >> 8) & 0xFF)/255,
+            blue: Double(val & 0xFF)/255
+        )
+    }
+}
 
 // MARK: - Main Content View
 struct ContentView: View {
@@ -8,65 +58,81 @@ struct ContentView: View {
     @State private var showAddSheet = false
 
     enum AppTab: String, CaseIterable {
-        case rules = "Rules"
-        case logs = "Logs"
+        case rules    = "Rules"
+        case logs     = "Logs"
         case settings = "Settings"
-        case about = "About"
+        case about    = "About"
+        case vpn      = "VPN Settings"
 
         var icon: String {
             switch self {
-            case .rules: return "shield.lefthalf.filled"
-            case .logs: return "terminal"
+            case .rules:    return "shield.lefthalf.filled"
+            case .logs:     return "terminal"
             case .settings: return "gear"
-            case .about: return "info.circle"
+            case .about:    return "info.circle"
+            case .vpn:      return "network.badge.shield.half.filled"
             }
         }
+
+        var isExternal: Bool { self == .vpn }
+    }
+
+    private var colors: TGColors {
+        let dark: Bool
+        switch settings.themeMode {
+        case .dark:   dark = true
+        case .light:  dark = false
+        case .system: dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        return TGColors(isDark: dark)
     }
 
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [
-                    Color(red: 0.06, green: 0.08, blue: 0.15),
-                    Color(red: 0.08, green: 0.12, blue: 0.22)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Liquid glass background
+            colors.background.ignoresSafeArea()
+
+            // Subtle noise texture overlay
+            colors.glassOverlay
+                .ignoresSafeArea()
 
             HStack(spacing: 0) {
                 // Sidebar
-                SidebarView(selectedTab: $selectedTab, showAddSheet: $showAddSheet)
-                    .frame(width: 200)
+                SidebarView(selectedTab: $selectedTab, showAddSheet: $showAddSheet, colors: colors)
+                    .frame(width: 204)
+                    .background(
+                        ZStack {
+                            colors.sidebarBg
+                            // frosted glass sheen
+                            LinearGradient(
+                                colors: [colors.glassOverlay, Color.clear],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                        }
+                    )
 
                 // Divider
-                Rectangle()
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 1)
+                colors.divider.frame(width: 1)
 
-                // Main Content
+                // Main content
                 Group {
                     switch selectedTab {
-                    case .rules:
-                        RulesView(showAddSheet: $showAddSheet)
-                    case .logs:
-                        LogsView()
-                    case .settings:
-                        SettingsView()
-                    case .about:
-                        AboutView()
+                    case .rules:    RulesView(showAddSheet: $showAddSheet, colors: colors)
+                    case .logs:     LogsView(colors: colors)
+                    case .settings: SettingsView(colors: colors)
+                    case .about:    AboutView(colors: colors)
+                    case .vpn:      Color.clear // never shown, opens externally
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            AddRuleSheet(isPresented: $showAddSheet)
+            AddRuleSheet(isPresented: $showAddSheet, colors: colors)
         }
         .environmentObject(routeManager)
         .environmentObject(settings)
+        .preferredColorScheme(settings.themeMode == .dark ? .dark : settings.themeMode == .light ? .light : nil)
     }
 }
 
@@ -74,118 +140,125 @@ struct ContentView: View {
 struct SidebarView: View {
     @Binding var selectedTab: ContentView.AppTab
     @Binding var showAddSheet: Bool
+    let colors: TGColors
     @EnvironmentObject var routeManager: RouteManager
 
     var body: some View {
         VStack(spacing: 0) {
-            // Logo area
-            VStack(spacing: 8) {
+            // Logo
+            VStack(spacing: 6) {
                 ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(red: 0.3, green: 0.6, blue: 1.0), Color(red: 0.1, green: 0.4, blue: 0.9)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 52, height: 52)
-                        .shadow(color: Color.blue.opacity(0.5), radius: 12, x: 0, y: 4)
-
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(LinearGradient(
+                            colors: [Color(hex: "3b82f6"), Color(hex: "1d4ed8")],
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 50, height: 50)
+                        .shadow(color: Color(hex: "3b82f6").opacity(0.5), radius: 12, y: 4)
                     Image(systemName: "shield.lefthalf.filled")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(.system(size: 22, weight: .semibold))
                         .foregroundColor(.white)
                 }
-
                 Text("TunnelGuard")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(colors.primaryText)
                 Text("v1.0.0")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.4))
+                    .font(.system(size: 10))
+                    .foregroundColor(colors.secondaryText)
             }
             .padding(.top, 28)
-            .padding(.bottom, 24)
-
-            // Status pill
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(routeManager.activeRulesCount > 0 ? Color.green : Color.gray)
-                    .frame(width: 6, height: 6)
-                    .shadow(color: routeManager.activeRulesCount > 0 ? .green : .clear, radius: 4)
-
-                Text(routeManager.activeRulesCount > 0 ? "\(routeManager.activeRulesCount) active" : "Idle")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.white.opacity(0.06))
-            .clipShape(Capsule())
             .padding(.bottom, 20)
 
-            // Nav items
+            // Status pill
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(routeManager.activeRulesCount > 0 ? colors.accentGreen : colors.secondaryText)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: routeManager.activeRulesCount > 0 ? colors.accentGreen.opacity(0.8) : .clear, radius: 4)
+                Text(routeManager.activeRulesCount > 0 ? "\(routeManager.activeRulesCount) active" : "Idle")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(colors.secondaryText)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 5)
+            .background(colors.panelBg)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(colors.panelBorder, lineWidth: 1))
+            .padding(.bottom, 18)
+
+            // Nav items — all tabs except VPN (which is at bottom)
             VStack(spacing: 2) {
-                ForEach(ContentView.AppTab.allCases, id: \.self) { tab in
-                    SidebarNavItem(tab: tab, isSelected: selectedTab == tab) {
+                ForEach(ContentView.AppTab.allCases.filter { !$0.isExternal }, id: \.self) { tab in
+                    SidebarNavItem(tab: tab, isSelected: selectedTab == tab, colors: colors) {
                         selectedTab = tab
                     }
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
 
             Spacer()
 
-            // Apply button
-            VStack(spacing: 8) {
+            // VPN Settings — external link at bottom
+            VStack(spacing: 6) {
+                Divider().background(colors.divider).padding(.horizontal, 10)
+
                 Button {
-                    routeManager.applyAllActiveRules()
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.NetworkExtensionSettingsUI.NESettingsUIExtension?VPN") {
+                        NSWorkspace.shared.open(url)
+                    }
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 11))
-                        Text("Apply Rules")
-                            .font(.system(size: 13, weight: .semibold))
+                    HStack(spacing: 9) {
+                        Image(systemName: "network.badge.shield.half.filled")
+                            .font(.system(size: 13, weight: .medium))
+                            .frame(width: 20)
+                            .foregroundColor(colors.accentBlue)
+                        Text("VPN Settings")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(colors.primaryText)
+                        Spacer()
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 10))
+                            .foregroundColor(colors.secondaryText)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .contentShape(Rectangle())
+                    .background(colors.panelBg)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(colors.panelBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+            }
+
+            // Action buttons
+            VStack(spacing: 8) {
+                Button { routeManager.applyAllActiveRules() } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "play.fill").font(.system(size: 11))
+                        Text("Apply Rules").font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(red: 0.2, green: 0.5, blue: 1.0), Color(red: 0.1, green: 0.35, blue: 0.85)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .leading, endPoint: .trailing))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .shadow(color: Color.blue.opacity(0.4), radius: 8, y: 3)
+                    .shadow(color: Color(hex:"3b82f6").opacity(0.4), radius: 8, y: 3)
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    showAddSheet = true
-                } label: {
+                Button { showAddSheet = true } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11))
-                        Text("Add Domain")
-                            .font(.system(size: 13, weight: .medium))
+                        Image(systemName: "plus").font(.system(size: 11))
+                        Text("Add Domain").font(.system(size: 13, weight: .medium))
                     }
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
-                    .background(Color.white.opacity(0.08))
+                    .foregroundColor(colors.primaryText.opacity(0.85))
+                    .frame(maxWidth: .infinity).padding(.vertical, 9)
+                    .background(colors.inputBg)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(colors.inputBorder, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 20)
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 18)
         }
     }
 }
@@ -193,34 +266,64 @@ struct SidebarView: View {
 struct SidebarNavItem: View {
     let tab: ContentView.AppTab
     let isSelected: Bool
+    let colors: TGColors
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: tab.icon)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .frame(width: 20)
-                    .foregroundColor(isSelected ? Color(red: 0.4, green: 0.7, blue: 1.0) : .white.opacity(0.55))
-
+                    .foregroundColor(isSelected ? colors.accentBlue : colors.secondaryText)
                 Text(tab.rawValue)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.55))
-
+                    .foregroundColor(isSelected ? colors.primaryText : colors.secondaryText)
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            // contentShape ensures the full row — including empty space — is tappable
+            .padding(.horizontal, 12).padding(.vertical, 9)
             .contentShape(Rectangle())
-            .background(isSelected ? Color.white.opacity(0.1) : Color.clear)
+            .background(isSelected ? colors.selectedNavBg : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 9))
-            .overlay(
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(isSelected ? Color(red: 0.3, green: 0.6, blue: 1.0).opacity(0.3) : Color.clear, lineWidth: 1)
-            )
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(isSelected ? colors.selectedNavBorder : Color.clear, lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Toast Modifier (shared)
+struct ToastOverlay: ViewModifier {
+    let message: String
+    let icon: String
+    let iconColor: Color
+    let isShowing: Bool
+    let colors: TGColors
+
+    func body(content: Content) -> some View {
+        ZStack(alignment: .bottom) {
+            content
+            if isShowing {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .foregroundColor(iconColor)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(message)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(colors.primaryText)
+                }
+                .padding(.horizontal, 18).padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 13)
+                        .fill(colors.toastBg)
+                        .shadow(color: .black.opacity(0.3), radius: 14, y: 5)
+                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(iconColor.opacity(0.3), lineWidth: 1))
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .padding(.bottom, 22)
+                .zIndex(99)
+            }
+        }
+        .animation(.spring(response: 0.38, dampingFraction: 0.8), value: isShowing)
     }
 }
 
@@ -228,11 +331,12 @@ struct SidebarNavItem: View {
 struct RulesView: View {
     @EnvironmentObject var routeManager: RouteManager
     @Binding var showAddSheet: Bool
+    let colors: TGColors
     @State private var searchText = ""
 
     var filteredRules: [RouteRule] {
-        if searchText.isEmpty { return routeManager.rules }
-        return routeManager.rules.filter {
+        searchText.isEmpty ? routeManager.rules :
+        routeManager.rules.filter {
             $0.domain.localizedCaseInsensitiveContains(searchText) ||
             $0.resolvedIPs.joined().contains(searchText)
         }
@@ -245,102 +349,84 @@ struct RulesView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Exclusion Rules")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(colors.primaryText)
                     Text("\(routeManager.rules.count) domains configured")
                         .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.45))
+                        .foregroundColor(colors.secondaryText)
                 }
                 Spacer()
-
-                // Search
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.white.opacity(0.4))
-                        .font(.system(size: 12))
+                    Image(systemName: "magnifyingglass").foregroundColor(colors.secondaryText).font(.system(size: 12))
                     TextField("Search domains...", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
-                        .foregroundColor(.white)
+                        .foregroundColor(colors.primaryText)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color.white.opacity(0.07))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(colors.inputBg)
                 .clipShape(RoundedRectangle(cornerRadius: 9))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(colors.inputBorder, lineWidth: 1))
                 .frame(width: 200)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 28)
-            .padding(.bottom, 18)
+            .padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 18)
 
-            // Error banner
+            // Error toast banner (inline, like save toast)
             if let err = routeManager.lastError {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .font(.system(size: 13))
+                        .foregroundColor(colors.accentOrange)
+                        .font(.system(size: 13, weight: .semibold))
                     Text(err)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.orange)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(colors.primaryText)
                     Spacer()
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.orange.opacity(0.1))
-                .overlay(Rectangle().frame(height: 1).foregroundColor(.orange.opacity(0.25)), alignment: .bottom)
+                .padding(.horizontal, 18).padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 13)
+                        .fill(colors.toastBg)
+                        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(colors.accentOrange.opacity(0.35), lineWidth: 1))
+                )
+                .padding(.horizontal, 24).padding(.bottom, 12)
                 .transition(.move(edge: .top).combined(with: .opacity))
-                .animation(.easeInOut, value: routeManager.lastError)
             }
 
             // Table header
             HStack {
-                Text("DOMAIN")
-                    .frame(width: 160, alignment: .leading)
-                Text("RESOLVED IPs")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("LAST UPDATED")
-                    .frame(width: 120, alignment: .leading)
-                Text("STATUS")
-                    .frame(width: 80, alignment: .center)
-                Text("ACTIONS")
-                    .frame(width: 80, alignment: .center)
+                Text("DOMAIN").frame(width: 160, alignment: .leading)
+                Text("RESOLVED IPs").frame(maxWidth: .infinity, alignment: .leading)
+                Text("LAST UPDATED").frame(width: 120, alignment: .leading)
+                Text("STATUS").frame(width: 80, alignment: .center)
+                Text("ACTIONS").frame(width: 80, alignment: .center)
             }
             .font(.system(size: 10, weight: .semibold))
-            .foregroundColor(.white.opacity(0.3))
-            .padding(.horizontal, 24)
-            .padding(.bottom, 8)
+            .foregroundColor(colors.secondaryText)
+            .padding(.horizontal, 24).padding(.bottom, 8)
 
-            Rectangle()
-                .fill(Color.white.opacity(0.06))
-                .frame(height: 1)
-                .padding(.horizontal, 24)
+            colors.divider.frame(height: 1).padding(.horizontal, 24)
 
-            // Rules list
             if filteredRules.isEmpty {
-                EmptyStateView(showAddSheet: $showAddSheet)
+                EmptyStateView(showAddSheet: $showAddSheet, colors: colors)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(filteredRules) { rule in
-                            RuleRowView(rule: rule)
-                            Rectangle()
-                                .fill(Color.white.opacity(0.04))
-                                .frame(height: 1)
-                                .padding(.horizontal, 24)
+                            RuleRowView(rule: rule, colors: colors)
+                            colors.divider.frame(height: 1).padding(.horizontal, 24)
                         }
                     }
                     .padding(.top, 4)
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: routeManager.lastError)
     }
 }
 
 struct RuleRowView: View {
     let rule: RouteRule
+    let colors: TGColors
     @EnvironmentObject var routeManager: RouteManager
     @State private var isHovered = false
     @State private var isRefreshing = false
@@ -349,13 +435,9 @@ struct RuleRowView: View {
         HStack {
             // Domain
             VStack(alignment: .leading, spacing: 2) {
-                Text(rule.domain)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
+                Text(rule.domain).font(.system(size: 13, weight: .medium)).foregroundColor(colors.primaryText)
                 if !rule.notes.isEmpty {
-                    Text(rule.notes)
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.35))
+                    Text(rule.notes).font(.system(size: 10)).foregroundColor(colors.secondaryText)
                 }
             }
             .frame(width: 160, alignment: .leading)
@@ -363,19 +445,28 @@ struct RuleRowView: View {
             // IPs
             VStack(alignment: .leading, spacing: 2) {
                 if rule.resolvedIPs.isEmpty {
-                    Text("Not resolved")
-                        .font(.system(size: 12))
-                        .foregroundColor(.orange.opacity(0.7))
+                    // Compact error badge in the IP column
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(colors.accentOrange)
+                        Text("ERR · Check Log")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(colors.accentOrange)
+                    }
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(colors.accentOrange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
                 } else {
                     ForEach(rule.resolvedIPs.prefix(3), id: \.self) { ip in
                         Text(ip)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(Color(red: 0.4, green: 0.8, blue: 0.6))
+                            .foregroundColor(colors.accentGreen)
                     }
                     if rule.resolvedIPs.count > 3 {
                         Text("+\(rule.resolvedIPs.count - 3) more")
                             .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.3))
+                            .foregroundColor(colors.secondaryText)
                     }
                 }
             }
@@ -383,49 +474,37 @@ struct RuleRowView: View {
 
             // Last updated
             Text(rule.lastResolved.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()) } ?? "Never")
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.35))
+                .font(.system(size: 11)).foregroundColor(colors.secondaryText)
                 .frame(width: 120, alignment: .leading)
 
             // Toggle
-            Toggle("", isOn: Binding(
-                get: { rule.isEnabled },
-                set: { _ in routeManager.toggleRule(rule) }
-            ))
-            .toggleStyle(GlassToggleStyle())
-            .frame(width: 80, alignment: .center)
+            Toggle("", isOn: Binding(get: { rule.isEnabled }, set: { _ in routeManager.toggleRule(rule) }))
+                .toggleStyle(GlassToggleStyle())
+                .frame(width: 80, alignment: .center)
 
             // Actions
             HStack(spacing: 8) {
                 Button {
                     isRefreshing = true
-                    Task {
-                        await routeManager.refreshIPs(for: rule)
-                        isRefreshing = false
-                    }
+                    Task { await routeManager.refreshIPs(for: rule); isRefreshing = false }
                 } label: {
                     Image(systemName: isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                         .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(colors.secondaryText)
                         .rotationEffect(isRefreshing ? .degrees(360) : .degrees(0))
                         .animation(isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isRefreshing)
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    routeManager.removeRule(rule)
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12))
-                        .foregroundColor(.red.opacity(0.6))
+                Button { routeManager.removeRule(rule) } label: {
+                    Image(systemName: "trash").font(.system(size: 12)).foregroundColor(colors.accentRed.opacity(0.7))
                 }
                 .buttonStyle(.plain)
             }
             .frame(width: 80, alignment: .center)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
-        .background(isHovered ? Color.white.opacity(0.04) : Color.clear)
+        .padding(.horizontal, 24).padding(.vertical, 14)
+        .background(isHovered ? colors.rowHover : Color.clear)
         .onHover { isHovered = $0 }
     }
 }
@@ -433,176 +512,102 @@ struct RuleRowView: View {
 // MARK: - Add Rule Sheet
 struct AddRuleSheet: View {
     @Binding var isPresented: Bool
+    let colors: TGColors
     @EnvironmentObject var routeManager: RouteManager
     @State private var domain = ""
     @State private var notes = ""
-    @State private var isResolving = false
-    @State private var errorMessage = ""
+    @State private var isAdding = false
+    @State private var errorMsg: String?
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.07, green: 0.09, blue: 0.17), Color(red: 0.09, green: 0.13, blue: 0.24)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 24) {
-                HStack {
-                    Text("Add Exclusion Rule")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Button { isPresented = false } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white.opacity(0.3))
-                    }
-                    .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                Text("Add Exclusion Rule")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundColor(colors.primaryText)
+                Spacer()
+                Button { isPresented = false } label: {
+                    Image(systemName: "xmark").font(.system(size: 13, weight: .medium))
+                        .foregroundColor(colors.secondaryText)
+                        .padding(6)
+                        .background(colors.inputBg)
+                        .clipShape(Circle())
                 }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Domain")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.5))
-
-                    TextField("e.g. google.com or api.example.com", text: $domain)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.07))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Notes (optional)")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.5))
-
-                    TextField("e.g. Work intranet, bypass VPN", text: $notes)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.07))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                }
-
-                if !errorMessage.isEmpty {
-                    Text(errorMessage)
-                        .font(.system(size: 12))
-                        .foregroundColor(.red.opacity(0.8))
-                }
-
-                HStack(spacing: 12) {
-                    Button { isPresented = false } label: {
-                        Text("Cancel")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white.opacity(0.6))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(Color.white.opacity(0.07))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        addRule()
-                    } label: {
-                        HStack(spacing: 8) {
-                            if isResolving {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.7)
-                            }
-                            Text(isResolving ? "Resolving..." : "Add & Resolve")
-                                .font(.system(size: 14, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(
-                            LinearGradient(
-                                colors: [Color(red: 0.2, green: 0.5, blue: 1.0), Color(red: 0.1, green: 0.35, blue: 0.85)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .shadow(color: .blue.opacity(0.4), radius: 8, y: 3)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(domain.isEmpty || isResolving)
-                    .opacity(domain.isEmpty ? 0.5 : 1.0)
-                }
+                .buttonStyle(.plain)
             }
-            .padding(28)
-        }
-        .frame(width: 440, height: 320)
-    }
 
-    private func addRule() {
-        errorMessage = ""
-        isResolving = true
-        Task {
-            let result = await routeManager.addRule(domain: domain, notes: notes)
-            await MainActor.run {
-                isResolving = false
-                if result == nil {
-                    errorMessage = "Failed to add rule. Check the domain name."
-                } else {
-                    isPresented = false
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Domain").font(.system(size: 12, weight: .medium)).foregroundColor(colors.secondaryText)
+                GlassTextField(placeholder: "e.g. example.com", text: $domain, colors: colors)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Notes (optional)").font(.system(size: 12, weight: .medium)).foregroundColor(colors.secondaryText)
+                GlassTextField(placeholder: "e.g. work services", text: $notes, colors: colors)
+            }
+
+            if let e = errorMsg {
+                Text(e).font(.system(size: 12)).foregroundColor(colors.accentRed)
+            }
+
+            HStack(spacing: 10) {
+                Button { isPresented = false } label: {
+                    Text("Cancel").font(.system(size: 13, weight: .medium))
+                        .foregroundColor(colors.secondaryText)
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(colors.inputBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(colors.inputBorder, lineWidth: 1))
                 }
+                .buttonStyle(.plain)
+
+                Button {
+                    guard !domain.trimmingCharacters(in: .whitespaces).isEmpty else {
+                        errorMsg = "Please enter a domain name."
+                        return
+                    }
+                    isAdding = true
+                    Task {
+                        await routeManager.addRule(domain: domain, notes: notes)
+                        isPresented = false
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if isAdding { ProgressView().scaleEffect(0.7).tint(.white) }
+                        Text(isAdding ? "Resolving..." : "Add Rule").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .leading, endPoint: .trailing))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .disabled(isAdding)
             }
         }
+        .padding(24)
+        .frame(width: 420)
+        .background(colors.background)
     }
 }
 
 // MARK: - Empty State
 struct EmptyStateView: View {
     @Binding var showAddSheet: Bool
+    let colors: TGColors
 
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
-            Image(systemName: "shield.slash")
-                .font(.system(size: 48, weight: .thin))
-                .foregroundColor(.white.opacity(0.15))
-
-            Text("No exclusion rules yet")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.white.opacity(0.4))
-
-            Text("Add a domain to exclude it from your VPN tunnel")
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.25))
-                .multilineTextAlignment(.center)
-
-            Button {
-                showAddSheet = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus")
-                    Text("Add First Rule")
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(Color(red: 0.2, green: 0.5, blue: 1.0).opacity(0.8))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+            Image(systemName: "shield.slash").font(.system(size: 48, weight: .thin)).foregroundColor(colors.secondaryText.opacity(0.4))
+            Text("No exclusion rules yet").font(.system(size: 17, weight: .semibold)).foregroundColor(colors.secondaryText)
+            Text("Add a domain to exclude it from your VPN tunnel").font(.system(size: 13)).foregroundColor(colors.secondaryText.opacity(0.6)).multilineTextAlignment(.center)
+            Button { showAddSheet = true } label: {
+                HStack(spacing: 8) { Image(systemName: "plus"); Text("Add First Rule") }
+                    .font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+                    .background(Color(hex:"3b82f6").opacity(0.85))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
             Spacer()
@@ -614,22 +619,17 @@ struct EmptyStateView: View {
 // MARK: - Logs View
 struct LogsView: View {
     @EnvironmentObject var routeManager: RouteManager
+    let colors: TGColors
     @State private var showCopiedToast = false
 
-    private var logText: String {
-        routeManager.lastActionLog.joined(separator: "\n")
-    }
+    private var logText: String { routeManager.lastActionLog.joined(separator: "\n") }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Activity Log")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Text("\(routeManager.lastActionLog.count) entries")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.4))
+                    Text("Activity Log").font(.system(size: 20, weight: .bold, design: .rounded)).foregroundColor(colors.primaryText)
+                    Text("\(routeManager.lastActionLog.count) entries").font(.system(size: 12)).foregroundColor(colors.secondaryText)
                 }
                 Spacer()
 
@@ -637,90 +637,74 @@ struct LogsView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(logText, forType: .string)
                     withAnimation { showCopiedToast = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        withAnimation { showCopiedToast = false }
-                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { withAnimation { showCopiedToast = false } }
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: showCopiedToast ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 11))
-                        Text(showCopiedToast ? "Copied!" : "Copy All")
-                            .font(.system(size: 12, weight: .medium))
+                        Image(systemName: showCopiedToast ? "checkmark" : "doc.on.doc").font(.system(size: 11))
+                        Text(showCopiedToast ? "Copied!" : "Copy All").font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundColor(showCopiedToast ? .green : .white.opacity(0.5))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.07))
+                    .foregroundColor(showCopiedToast ? colors.accentGreen : colors.secondaryText)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(colors.inputBg)
                     .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(colors.inputBorder, lineWidth: 1))
                 }
-                .buttonStyle(.plain)
-                .animation(.easeInOut(duration: 0.2), value: showCopiedToast)
+                .buttonStyle(.plain).animation(.easeInOut(duration: 0.2), value: showCopiedToast)
 
-                Button {
-                    RouteManager.shared.lastActionLog.removeAll()
-                } label: {
-                    Text("Clear")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.07))
+                Button { RouteManager.shared.lastActionLog.removeAll() } label: {
+                    Text("Clear").font(.system(size: 12, weight: .medium))
+                        .foregroundColor(colors.secondaryText)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(colors.inputBg)
                         .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(colors.inputBorder, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 28)
-            .padding(.bottom, 18)
+            .padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 18)
 
-            LogTextView(text: logText)
-                .background(Color.black.opacity(0.25))
+            LogTextView(text: logText, colors: colors)
+                .background(colors.panelBg)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.06), lineWidth: 1))
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(colors.panelBorder, lineWidth: 1))
+                .padding(.horizontal, 24).padding(.bottom, 24)
         }
+        .modifier(ToastOverlay(message: "Copied to clipboard", icon: "doc.on.doc.fill", iconColor: colors.accentGreen, isShowing: showCopiedToast, colors: colors))
     }
 }
 
-// MARK: - Log Text View (native NSTextView — fully selectable & copyable)
+// MARK: - Log Text View (NSTextView — selectable, copyable)
 struct LogTextView: NSViewRepresentable {
     let text: String
+    let colors: TGColors
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let tv = scrollView.documentView as? NSTextView else { return scrollView }
-        tv.isEditable = false
-        tv.isSelectable = true
-        tv.isRichText = false
-        tv.backgroundColor = .clear
-        tv.drawsBackground = false
+        let sv = NSTextView.scrollableTextView()
+        guard let tv = sv.documentView as? NSTextView else { return sv }
+        tv.isEditable = false; tv.isSelectable = true; tv.isRichText = false
+        tv.backgroundColor = .clear; tv.drawsBackground = false
         tv.textContainerInset = NSSize(width: 16, height: 12)
         tv.isAutomaticLinkDetectionEnabled = false
         tv.isAutomaticQuoteSubstitutionEnabled = false
-        scrollView.backgroundColor = .clear
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        return scrollView
+        sv.backgroundColor = .clear; sv.drawsBackground = false
+        sv.hasVerticalScroller = true; sv.autohidesScrollers = true
+        return sv
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let tv = scrollView.documentView as? NSTextView else { return }
+    func updateNSView(_ sv: NSScrollView, context: Context) {
+        guard let tv = sv.documentView as? NSTextView else { return }
         let lines = text.components(separatedBy: "\n")
-        let attributed = NSMutableAttributedString()
+        let attr = NSMutableAttributedString()
         for (i, line) in lines.enumerated() {
-            let color: NSColor
-            if line.contains("⚠️")                               { color = NSColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 1) }
-            else if line.contains("Error") || line.contains("error") { color = NSColor(red: 0.95, green: 0.35, blue: 0.35, alpha: 1) }
-            else                                                  { color = NSColor(red: 0.4, green: 0.85, blue: 0.6, alpha: 1) }
-            let str = i < lines.count - 1 ? line + "\n" : line
-            attributed.append(NSAttributedString(string: str, attributes: [
-                .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: color
+            let c: NSColor
+            if line.contains("⚠️")                                   { c = NSColor(red:1,green:0.6,blue:0.2,alpha:1) }
+            else if line.contains("Error") || line.contains("error") { c = NSColor(red:0.95,green:0.35,blue:0.35,alpha:1) }
+            else                                                      { c = colors.logText }
+            attr.append(NSAttributedString(string: i < lines.count-1 ? line+"\n" : line, attributes: [
+                .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: c
             ]))
         }
-        tv.textStorage?.setAttributedString(attributed)
+        tv.textStorage?.setAttributedString(attr)
         tv.scrollToEndOfDocument(nil)
     }
 }
@@ -728,6 +712,7 @@ struct LogTextView: NSViewRepresentable {
 // MARK: - Settings View
 struct SettingsView: View {
     @StateObject private var settings = AppSettings.shared
+    let colors: TGColors
     @State private var showSavedToast = false
 
     var body: some View {
@@ -736,118 +721,98 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     Text("Settings")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(colors.primaryText)
                         .padding(.top, 28)
 
                     // Gateway
-                    SettingsSectionView(title: "VPN Gateway", icon: "network") {
+                    SettingsSectionView(title: "VPN Gateway", icon: "network", colors: colors) {
                         VStack(alignment: .leading, spacing: 14) {
-                            Picker("Gateway Mode", selection: $settings.gatewayMode) {
-                                ForEach(AppSettings.GatewayMode.allCases, id: \.self) { mode in
-                                    Text(mode.rawValue).tag(mode)
-                                }
+                            Picker("", selection: $settings.gatewayMode) {
+                                ForEach(AppSettings.GatewayMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                             }
                             .pickerStyle(.segmented)
-
                             if settings.gatewayMode == .automatic {
                                 HStack {
-                                    Text("Detected Gateway:")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.5))
+                                    Text("Detected:").font(.system(size: 13)).foregroundColor(colors.secondaryText)
                                     Text(settings.detectedGatewayIP.isEmpty ? "Detecting..." : settings.detectedGatewayIP)
-                                        .font(.system(size: 13, design: .monospaced))
-                                        .foregroundColor(Color(red: 0.4, green: 0.8, blue: 0.6))
+                                        .font(.system(size: 13, design: .monospaced)).foregroundColor(colors.accentGreen)
                                     Spacer()
                                     Button { settings.detectGateway() } label: {
-                                        Image(systemName: "arrow.clockwise")
-                                            .foregroundColor(.white.opacity(0.4))
-                                    }
-                                    .buttonStyle(.plain)
+                                        Image(systemName: "arrow.clockwise").foregroundColor(colors.secondaryText)
+                                    }.buttonStyle(.plain)
                                 }
                             } else {
-                                GlassTextField(placeholder: "e.g. 192.168.1.1", text: $settings.manualGatewayIP)
+                                GlassTextField(placeholder: "e.g. 192.168.1.1", text: $settings.manualGatewayIP, colors: colors)
                             }
                         }
                     }
 
                     // DNS
-                    SettingsSectionView(title: "DNS Resolution", icon: "server.rack") {
+                    SettingsSectionView(title: "DNS Resolution", icon: "server.rack", colors: colors) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("DNS Server for IP Resolution")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.5))
-                            GlassTextField(placeholder: "8.8.8.8", text: $settings.dnsServer)
+                            Text("DNS Server for IP resolution").font(.system(size: 12)).foregroundColor(colors.secondaryText)
+                            GlassTextField(placeholder: "8.8.8.8", text: $settings.dnsServer, colors: colors)
+                        }
+                    }
+
+                    // Appearance
+                    SettingsSectionView(title: "Appearance", icon: "paintpalette", colors: colors) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Text("Theme").font(.system(size: 13)).foregroundColor(colors.primaryText.opacity(0.85))
+                                Spacer()
+                                Picker("", selection: $settings.themeMode) {
+                                    ForEach(AppSettings.ThemeMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                }
+                                .pickerStyle(.segmented)
+                                .frame(width: 200)
+                            }
+                        }
+                    }
+
+                    // Presence
+                    SettingsSectionView(title: "App Presence", icon: "menubar.dock.rectangle", colors: colors) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Text("Show app in").font(.system(size: 13)).foregroundColor(colors.primaryText.opacity(0.85))
+                                Spacer()
+                                Picker("", selection: $settings.presenceMode) {
+                                    ForEach(AppSettings.PresenceMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                }
+                                .pickerStyle(.segmented)
+                                .frame(width: 280)
+                            }
+                            Text("Menu Bar Only hides the Dock icon. Dock Only removes the menu bar icon.")
+                                .font(.system(size: 11))
+                                .foregroundColor(colors.secondaryText)
                         }
                     }
 
                     // Startup
-                    SettingsSectionView(title: "Startup & Behavior", icon: "power") {
+                    SettingsSectionView(title: "Startup & Behavior", icon: "power", colors: colors) {
                         VStack(alignment: .leading, spacing: 14) {
-                            GlassToggleRow(label: "Launch at system startup", isOn: $settings.runOnStartup)
-                            GlassToggleRow(label: "Apply active rules on launch", isOn: $settings.applyOnLaunch)
-                            GlassToggleRow(label: "Show in Dock", isOn: $settings.showInDock)
+                            GlassToggleRow(label: "Launch at system startup", isOn: $settings.runOnStartup, colors: colors)
+                            GlassToggleRow(label: "Apply active rules on launch", isOn: $settings.applyOnLaunch, colors: colors)
                         }
                     }
 
-                    // Save button
-                    Button {
-                        settings.save()
-                    } label: {
-                        Text("Save Settings")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color(red: 0.2, green: 0.5, blue: 1.0), Color(red: 0.1, green: 0.35, blue: 0.85)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
+                    // Save
+                    Button { settings.save() } label: {
+                        Text("Save Settings").font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 11)
+                            .background(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .leading, endPoint: .trailing))
                             .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .shadow(color: .blue.opacity(0.4), radius: 8, y: 3)
+                            .shadow(color: Color(hex:"3b82f6").opacity(0.4), radius: 8, y: 3)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.bottom, 28)
+                    .buttonStyle(.plain).padding(.bottom, 28)
                 }
                 .padding(.horizontal, 24)
             }
-
-            // ── Saved Toast ──
-            if showSavedToast {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("Settings saved")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(red: 0.1, green: 0.18, blue: 0.12).opacity(0.95))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.green.opacity(0.35), lineWidth: 1)
-                        )
-                )
-                .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .padding(.bottom, 20)
-                .zIndex(10)
-            }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSavedToast)
+        .modifier(ToastOverlay(message: "Settings saved", icon: "checkmark.circle.fill", iconColor: colors.accentGreen, isShowing: showSavedToast, colors: colors))
         .onReceive(NotificationCenter.default.publisher(for: .settingsSaved)) { _ in
-            withAnimation {
-                showSavedToast = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                withAnimation { showSavedToast = false }
-            }
+            withAnimation { showSavedToast = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { withAnimation { showSavedToast = false } }
         }
         .environmentObject(settings)
     }
@@ -856,26 +821,20 @@ struct SettingsView: View {
 struct SettingsSectionView<Content: View>: View {
     let title: String
     let icon: String
+    let colors: TGColors
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(red: 0.4, green: 0.7, blue: 1.0))
-                Text(title.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.35))
+            HStack(spacing: 7) {
+                Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundColor(colors.accentBlue)
+                Text(title.uppercased()).font(.system(size: 11, weight: .semibold)).foregroundColor(colors.secondaryText)
             }
-
-            VStack(alignment: .leading, spacing: 14) {
-                content
-            }
-            .padding(16)
-            .background(Color.white.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1))
+            VStack(alignment: .leading, spacing: 14) { content }
+                .padding(16)
+                .background(colors.panelBg)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(colors.panelBorder, lineWidth: 1))
         }
     }
 }
@@ -883,141 +842,99 @@ struct SettingsSectionView<Content: View>: View {
 struct GlassTextField: View {
     let placeholder: String
     @Binding var text: String
+    let colors: TGColors
 
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.plain)
             .font(.system(size: 13, design: .monospaced))
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color.white.opacity(0.07))
+            .foregroundColor(colors.primaryText)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(colors.inputBg)
             .clipShape(RoundedRectangle(cornerRadius: 9))
-            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(colors.inputBorder, lineWidth: 1))
     }
 }
 
 struct GlassToggleRow: View {
     let label: String
     @Binding var isOn: Bool
+    let colors: TGColors
 
     var body: some View {
         HStack {
-            Text(label)
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.8))
+            Text(label).font(.system(size: 13)).foregroundColor(colors.primaryText.opacity(0.85))
             Spacer()
-            Toggle("", isOn: $isOn)
-                .toggleStyle(GlassToggleStyle())
+            Toggle("", isOn: $isOn).toggleStyle(GlassToggleStyle())
         }
     }
 }
 
 // MARK: - About View
 struct AboutView: View {
+    let colors: TGColors
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // App hero
                 VStack(spacing: 12) {
                     ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color(red: 0.25, green: 0.55, blue: 1.0), Color(red: 0.1, green: 0.35, blue: 0.85)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 80, height: 80)
-                            .shadow(color: .blue.opacity(0.5), radius: 20, y: 8)
-
-                        Image(systemName: "shield.lefthalf.filled")
-                            .font(.system(size: 36, weight: .semibold))
-                            .foregroundColor(.white)
+                            .shadow(color: Color(hex:"3b82f6").opacity(0.5), radius: 20, y: 8)
+                        Image(systemName: "shield.lefthalf.filled").font(.system(size: 36, weight: .semibold)).foregroundColor(.white)
                     }
-
-                    Text("TunnelGuard")
-                        .font(.system(size: 26, weight: .black, design: .rounded))
-                        .foregroundColor(.white)
-
-                    Text("Version 1.0.0  ·  Released March 2026")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.35))
-
-                    Text("macOS VPN Split-Tunnel Manager")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.5))
+                    Text("TunnelGuard").font(.system(size: 26, weight: .black, design: .rounded)).foregroundColor(colors.primaryText)
+                    Text("Version 1.0.0  ·  March 2026").font(.system(size: 12)).foregroundColor(colors.secondaryText)
+                    Text("macOS VPN Split-Tunnel Manager").font(.system(size: 14)).foregroundColor(colors.secondaryText)
                 }
                 .padding(.top, 32)
 
-                // Developer
                 VStack(spacing: 12) {
-                    Text("DEVELOPER")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.3))
-
+                    Text("DEVELOPER").font(.system(size: 10, weight: .semibold)).foregroundColor(colors.secondaryText)
                     HStack(spacing: 16) {
                         Circle()
                             .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 44, height: 44)
                             .overlay(Text("A").font(.system(size: 18, weight: .black)).foregroundColor(.white))
-
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Amirhossein Hosseinpour")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
-                            Text("AmirhpCom")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.4))
+                            Text("Amirhossein Hosseinpour").font(.system(size: 15, weight: .semibold)).foregroundColor(colors.primaryText)
+                            Text("AmirhpCom").font(.system(size: 12)).foregroundColor(colors.secondaryText)
                         }
                         Spacer()
-
                         HStack(spacing: 10) {
-                            LinkButton(title: "Website", url: "https://amirhp.com/landing", icon: "globe")
-                            LinkButton(title: "GitHub", url: "https://github.com/amirhp-com", icon: "chevron.left.forwardslash.chevron.right")
+                            LinkButton(title: "Website", url: "https://amirhp.com/landing", icon: "globe", colors: colors)
+                            LinkButton(title: "GitHub", url: "https://github.com/amirhp-com", icon: "chevron.left.forwardslash.chevron.right", colors: colors)
                         }
                     }
                     .padding(16)
-                    .background(Color.white.opacity(0.05))
+                    .background(colors.panelBg)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(colors.panelBorder, lineWidth: 1))
                 }
 
-                // Disclaimer
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.orange)
-                            .font(.system(size: 12))
-                        Text("DISCLAIMER")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.orange.opacity(0.7))
+                        Image(systemName: "exclamationmark.triangle").foregroundColor(colors.accentOrange).font(.system(size: 12))
+                        Text("DISCLAIMER").font(.system(size: 10, weight: .semibold)).foregroundColor(colors.accentOrange.opacity(0.8))
                     }
-                    Text("TunnelGuard modifies your system's routing table using macOS native commands. This requires administrator privileges. Improper use may affect network connectivity. Always ensure you understand the routing rules you apply. The developer assumes no responsibility for network disruptions, data loss, security incidents, or any other consequences arising from the use of this software. Use at your own risk. This tool is intended for advanced users familiar with network routing concepts.")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.4))
-                        .lineSpacing(4)
+                    Text("TunnelGuard modifies your system's routing table using macOS native commands. This requires administrator privileges. Improper use may affect network connectivity. The developer assumes no responsibility for network disruptions, data loss, or security incidents. Use at your own risk.")
+                        .font(.system(size: 12)).foregroundColor(colors.secondaryText).lineSpacing(4)
                 }
                 .padding(16)
-                .background(Color.orange.opacity(0.05))
+                .background(colors.accentOrange.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.15), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(colors.accentOrange.opacity(0.15), lineWidth: 1))
 
-                // Help & Links
                 HStack(spacing: 12) {
-                    LinkButton(title: "Documentation & Help", url: "https://amirhp.com/landing", icon: "questionmark.circle", fullWidth: true)
-                    LinkButton(title: "Report Issue", url: "https://github.com/amirhp-com", icon: "ant.circle", fullWidth: true)
+                    LinkButton(title: "Documentation & Help", url: "https://amirhp-com.github.io/tunnelguard/", icon: "questionmark.circle", colors: colors, fullWidth: true)
+                    LinkButton(title: "Report Issue", url: "https://github.com/amirhp-com/tunnelguard/issues/new", icon: "ant.circle", colors: colors, fullWidth: true)
                 }
 
-                // Copyleft
                 VStack(spacing: 4) {
-                    Text("© 2026 Amirhossein Hosseinpour · AmirhpCom")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.25))
-                    Text("Copyleft 🄯 — Free to use, modify, and distribute with attribution")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.2))
+                    Text("© 2026 Amirhossein Hosseinpour · AmirhpCom").font(.system(size: 11)).foregroundColor(colors.secondaryText.opacity(0.6))
+                    Text("Copyleft — Free to use, modify, and distribute").font(.system(size: 11)).foregroundColor(colors.secondaryText.opacity(0.4))
                 }
                 .padding(.bottom, 28)
             }
@@ -1030,45 +947,40 @@ struct LinkButton: View {
     let title: String
     let url: String
     let icon: String
+    let colors: TGColors
     var fullWidth: Bool = false
 
     var body: some View {
         Button {
-            if let nsUrl = URL(string: url) {
-                NSWorkspace.shared.open(nsUrl)
-            }
+            if let u = URL(string: url) { NSWorkspace.shared.open(u) }
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 12))
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: icon).font(.system(size: 12))
+                Text(title).font(.system(size: 13, weight: .medium))
                 if fullWidth { Spacer() }
             }
-            .foregroundColor(.white.opacity(0.7))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .foregroundColor(colors.primaryText.opacity(0.75))
+            .padding(.horizontal, 14).padding(.vertical, 10)
             .frame(maxWidth: fullWidth ? .infinity : nil)
-            .background(Color.white.opacity(0.07))
+            .background(colors.panelBg)
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(colors.panelBorder, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
 }
 
-// MARK: - Custom Toggle Style
+// MARK: - Custom Toggle
 struct GlassToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 14)
-                .fill(configuration.isOn ? Color(red: 0.2, green: 0.5, blue: 1.0) : Color.white.opacity(0.12))
+                .fill(configuration.isOn ? Color(hex:"3b82f6") : Color.secondary.opacity(0.25))
                 .frame(width: 44, height: 26)
-
             Circle()
                 .fill(.white)
                 .frame(width: 20, height: 20)
-                .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+                .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
                 .offset(x: configuration.isOn ? 9 : -9)
                 .animation(.spring(response: 0.25, dampingFraction: 0.8), value: configuration.isOn)
         }

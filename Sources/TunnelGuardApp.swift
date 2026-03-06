@@ -31,8 +31,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBarItem()
         RouteManager.shared.loadRules()
 
-        // Apply saved dock visibility immediately
-        applyDockPolicy(show: AppSettings.shared.showInDock)
+        // Apply saved presence mode immediately
+        applyPresencePolicy()
 
         if AppSettings.shared.applyOnLaunch {
             RouteManager.shared.applyAllActiveRules()
@@ -128,17 +128,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         RouteManager.shared.applyAllActiveRules()
     }
 
-    // MARK: - Dock Visibility
+    // MARK: - Dock / MenuBar Visibility
 
-    func applyDockPolicy(show: Bool) {
+    func applyPresencePolicy() {
+        let mode = AppSettings.shared.presenceMode
         DispatchQueue.main.async {
-            NSApp.setActivationPolicy(show ? .regular : .accessory)
+            switch mode {
+            case .menuBarOnly:
+                NSApp.setActivationPolicy(.accessory)
+                self.statusItem?.isVisible = true
+            case .dockOnly:
+                NSApp.setActivationPolicy(.regular)
+                self.statusItem?.isVisible = false
+            case .both:
+                NSApp.setActivationPolicy(.regular)
+                self.statusItem?.isVisible = true
+            }
         }
     }
 
+    func applyDockPolicy(show: Bool) {
+        applyPresencePolicy()
+    }
+
     @objc private func handleDockSettingChanged(_ notification: Notification) {
-        let show = notification.userInfo?["show"] as? Bool ?? true
-        applyDockPolicy(show: show)
+        applyPresencePolicy()
     }
 }
 
