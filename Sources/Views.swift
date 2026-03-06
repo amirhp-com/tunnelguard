@@ -211,6 +211,8 @@ struct SidebarNavItem: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
+            // contentShape ensures the full row — including empty space — is tappable
+            .contentShape(Rectangle())
             .background(isSelected ? Color.white.opacity(0.1) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 9))
             .overlay(
@@ -273,6 +275,25 @@ struct RulesView: View {
             .padding(.horizontal, 24)
             .padding(.top, 28)
             .padding(.bottom, 18)
+
+            // Error banner
+            if let err = routeManager.lastError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 13))
+                    Text(err)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.orange)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Color.orange.opacity(0.1))
+                .overlay(Rectangle().frame(height: 1).foregroundColor(.orange.opacity(0.25)), alignment: .bottom)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut, value: routeManager.lastError)
+            }
 
             // Table header
             HStack {
@@ -595,6 +616,10 @@ struct LogsView: View {
     @EnvironmentObject var routeManager: RouteManager
     @State private var showCopiedToast = false
 
+    private var logText: String {
+        routeManager.lastActionLog.joined(separator: "\n")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -608,11 +633,9 @@ struct LogsView: View {
                 }
                 Spacer()
 
-                // Copy all button
                 Button {
-                    let all = routeManager.lastActionLog.joined(separator: "\n")
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(all, forType: .string)
+                    NSPasteboard.general.setString(logText, forType: .string)
                     withAnimation { showCopiedToast = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         withAnimation { showCopiedToast = false }
@@ -633,7 +656,6 @@ struct LogsView: View {
                 .buttonStyle(.plain)
                 .animation(.easeInOut(duration: 0.2), value: showCopiedToast)
 
-                // Clear button
                 Button {
                     RouteManager.shared.lastActionLog.removeAll()
                 } label: {
@@ -651,68 +673,55 @@ struct LogsView: View {
             .padding(.top, 28)
             .padding(.bottom, 18)
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(routeManager.lastActionLog.enumerated()), id: \.offset) { idx, entry in
-                            // TextEditor-based row so each line is selectable & copyable
-                            SelectableLogLine(entry: entry)
-                                .id(idx)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
+            LogTextView(text: logText)
                 .background(Color.black.opacity(0.25))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.06), lineWidth: 1))
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
-                .onChange(of: routeManager.lastActionLog.count) { _ in
-                    if let last = routeManager.lastActionLog.indices.last {
-                        proxy.scrollTo(last, anchor: .bottom)
-                    }
-                }
-            }
         }
     }
 }
 
-// MARK: - Selectable Log Line
-/// Uses NSTextField under the hood (via NSViewRepresentable) so the text
-/// is natively selectable and copyable with ⌘C, just like a terminal.
-struct SelectableLogLine: NSViewRepresentable {
-    let entry: String
+// MARK: - Log Text View (native NSTextView — fully selectable & copyable)
+struct LogTextView: NSViewRepresentable {
+    let text: String
 
-    private var textColor: NSColor {
-        if entry.contains("⚠️") { return NSColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 1) }
-        if entry.contains("Error") || entry.contains("error") { return NSColor(red: 0.95, green: 0.35, blue: 0.35, alpha: 1) }
-        return NSColor(red: 0.4, green: 0.85, blue: 0.6, alpha: 1)
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        guard let tv = scrollView.documentView as? NSTextView else { return scrollView }
+        tv.isEditable = false
+        tv.isSelectable = true
+        tv.isRichText = false
+        tv.backgroundColor = .clear
+        tv.drawsBackground = false
+        tv.textContainerInset = NSSize(width: 16, height: 12)
+        tv.isAutomaticLinkDetectionEnabled = false
+        tv.isAutomaticQuoteSubstitutionEnabled = false
+        scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        return scrollView
     }
 
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
-        field.isEditable = false
-        field.isSelectable = true          // ← makes it selectable & copyable
-        field.isBordered = false
-        field.isBezeled = false
-        field.backgroundColor = .clear
-        field.drawsBackground = false
-        field.lineBreakMode = .byCharWrapping
-        field.usesSingleLineMode = false
-        field.cell?.wraps = true
-        field.cell?.isScrollable = false
-        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        return field
-    }
-
-    func updateNSView(_ field: NSTextField, context: Context) {
-        field.attributedStringValue = NSAttributedString(
-            string: entry,
-            attributes: [
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let tv = scrollView.documentView as? NSTextView else { return }
+        let lines = text.components(separatedBy: "\n")
+        let attributed = NSMutableAttributedString()
+        for (i, line) in lines.enumerated() {
+            let color: NSColor
+            if line.contains("⚠️")                               { color = NSColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 1) }
+            else if line.contains("Error") || line.contains("error") { color = NSColor(red: 0.95, green: 0.35, blue: 0.35, alpha: 1) }
+            else                                                  { color = NSColor(red: 0.4, green: 0.85, blue: 0.6, alpha: 1) }
+            let str = i < lines.count - 1 ? line + "\n" : line
+            attributed.append(NSAttributedString(string: str, attributes: [
                 .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: textColor
-            ]
-        )
+                .foregroundColor: color
+            ]))
+        }
+        tv.textStorage?.setAttributedString(attributed)
+        tv.scrollToEndOfDocument(nil)
     }
 }
 

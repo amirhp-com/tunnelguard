@@ -133,6 +133,7 @@ class RouteManager: ObservableObject {
     @Published var isApplying: Bool = false
     @Published var lastActionLog: [String] = []
     @Published var activeRulesCount: Int = 0
+    @Published var lastError: String? = nil   // brief message shown in UI
 
     private let rulesKey = "TunnelGuardRules"
 
@@ -163,14 +164,19 @@ class RouteManager: ObservableObject {
         guard !trimmed.isEmpty else { return nil }
 
         var rule = RouteRule(domain: trimmed, notes: notes)
-        let ips = await resolveIPs(for: trimmed)
+        let (ips, debugOutput) = await resolveIPsDetailed(for: trimmed)
         rule.resolvedIPs = ips
         rule.lastResolved = Date()
 
         await MainActor.run {
             rules.append(rule)
             saveRules()
-            log("Added rule for \(trimmed) → \(ips.joined(separator: ", "))")
+            if ips.isEmpty {
+                log("⚠️ No IPs found for \(trimmed)")
+                if !debugOutput.isEmpty { log("   dig output: \(debugOutput)") }
+            } else {
+                log("Added rule for \(trimmed) → \(ips.joined(separator: ", "))")
+            }
         }
         return rule
     }
@@ -197,15 +203,26 @@ class RouteManager: ObservableObject {
     func refreshIPs(for rule: RouteRule) async {
         guard let idx = rules.firstIndex(where: { $0.id == rule.id }) else { return }
         removeRoutes(for: rule)
-        let ips = await resolveIPs(for: rule.domain)
+        let (ips, debugOutput) = await resolveIPsDetailed(for: rule.domain)
         await MainActor.run {
-            rules[idx].resolvedIPs = ips
-            rules[idx].lastResolved = Date()
-            if rules[idx].isEnabled {
-                applyRoutes(for: rules[idx])
+            if ips.isEmpty {
+                // Clean message on the UI badge; full dig output goes to log only
+                lastError = "Could not resolve \(rule.domain)"
+                log("⚠️ Resolution failed for \(rule.domain)")
+                if !debugOutput.isEmpty {
+                    log("   dig output: \(debugOutput)")
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self.lastError = nil }
+            } else {
+                lastError = nil
+                rules[idx].resolvedIPs = ips
+                rules[idx].lastResolved = Date()
+                if rules[idx].isEnabled {
+                    applyRoutes(for: rules[idx])
+                }
+                saveRules()
+                log("Refreshed IPs for \(rule.domain) → \(ips.joined(separator: ", "))")
             }
-            saveRules()
-            log("Refreshed IPs for \(rule.domain) → \(ips.joined(separator: ", "))")
         }
     }
 
@@ -241,16 +258,24 @@ class RouteManager: ObservableObject {
         }
     }
 
-    func resolveIPs(for domain: String) async -> [String] {
+    /// Returns (IPs, rawDigOutput). IPs is empty on failure; rawDigOutput has the debug info.
+    func resolveIPsDetailed(for domain: String) async -> ([String], String) {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let result = shell("dig +short \(domain) A | grep -E '^[0-9]'")
-                let ips = result.components(separatedBy: "\n")
+                let raw = shell("dig +short \(domain) A 2>&1")
+                let ips = raw.components(separatedBy: "\n")
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty && $0.contains(".") }
-                continuation.resume(returning: ips)
+                    .filter { !$0.isEmpty && $0.allSatisfy({ $0.isNumber || $0 == "." }) && $0.contains(".") }
+                // Keep raw output for the log but strip it from the UI
+                let debugLine = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                continuation.resume(returning: (ips, debugLine))
             }
         }
+    }
+
+    func resolveIPs(for domain: String) async -> [String] {
+        let (ips, _) = await resolveIPsDetailed(for: domain)
+        return ips
     }
 
     private func log(_ message: String) {
