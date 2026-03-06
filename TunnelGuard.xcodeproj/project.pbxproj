@@ -76,10 +76,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A8000001 /* Build configuration list for PBXNativeTarget "TunnelGuard" */;
 			buildPhases = (
-				BBC9201B2F5A61CD00623AFD /* Run Script */,
 				A7000002 /* Resources */,
 				A7000001 /* Sources */,
 				A4000001 /* Frameworks */,
+				BBC9201B2F5A61CD00623AFD /* Run Script */,
 			);
 			buildRules = (
 			);
@@ -152,7 +152,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Bump in source\nBUILD=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleVersion\" \"${SRCROOT}/Info.plist\" 2>/dev/null || echo \"0\")\nif ! [[ \"$BUILD\" =~ ^[0-9]+$ ]]; then BUILD=0; fi\nBUILD=$((BUILD + 1))\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${SRCROOT}/Info.plist\"\n\n# Also bump in built product\nif [ -f \"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\" ]; then\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\nfi\n\necho \"Build number: $BUILD\"\n";
+			shellScript = "# Bump in source\nBUILD=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleVersion\" \"${SRCROOT}/Info.plist\" 2>/dev/null || echo \"0\")\nif ! [[ \"$BUILD\" =~ ^[0-9]+$ ]]; then BUILD=0; fi\nBUILD=$((BUILD + 1))\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${SRCROOT}/Info.plist\"\n\n# Patch the built app bundle too\nAPP_PLIST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Info.plist\"\nif [ -f \"$APP_PLIST\" ]; then\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"$APP_PLIST\"\nfi\n\necho \"Build number: $BUILD\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
