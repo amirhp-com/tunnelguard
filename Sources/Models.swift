@@ -27,6 +27,7 @@ class AppSettings: ObservableObject {
     @Published var gatewayMode: GatewayMode = .automatic
     @Published var manualGatewayIP: String = ""
     @Published var detectedGatewayIP: String = ""
+    @Published var gatewayError: String? = nil
     @Published var runOnStartup: Bool = false
     @Published var applyOnLaunch: Bool = true
     @Published var dnsServer: String = "8.8.8.8"
@@ -67,8 +68,27 @@ class AppSettings: ObservableObject {
             let result = shell("netstat -nr | grep default | grep -v ':' | head -1 | awk '{print $2}'")
             let gateway = result.trimmingCharacters(in: .whitespacesAndNewlines)
             DispatchQueue.main.async {
-                self.detectedGatewayIP = gateway.isEmpty ? "192.168.1.1" : gateway
+                if gateway.isEmpty {
+                    self.detectedGatewayIP = ""
+                    self.gatewayError = "Could not detect gateway"
+                } else if Self.isValidIPv4(gateway) {
+                    self.detectedGatewayIP = gateway
+                    self.gatewayError = nil
+                } else {
+                    // Non-IP result like "link#28"
+                    self.detectedGatewayIP = gateway
+                    self.gatewayError = "Detected \"\(gateway)\" which is not a valid IP. Please enter gateway manually."
+                }
             }
+        }
+    }
+
+    private static func isValidIPv4(_ s: String) -> Bool {
+        let parts = s.components(separatedBy: ".")
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { part in
+            guard let n = Int(part), n >= 0, n <= 255 else { return false }
+            return true
         }
     }
 
@@ -237,6 +257,7 @@ class RouteManager: ObservableObject {
 
     @Published var rules: [RouteRule] = []
     @Published var isApplying: Bool = false
+    @Published var isRulesApplied: Bool = false
     @Published var lastActionLog: [String] = []
     @Published var activeRulesCount: Int = 0
     @Published var lastError: String? = nil
@@ -405,9 +426,18 @@ class RouteManager: ObservableObject {
             applyResult = .error("Some routes failed — check log")
             log("⚠️ Completed with errors.")
         } else {
+            isRulesApplied = true
             applyResult = .success(count)
             log("Done applying \(count) rules.")
         }
+    }
+
+    func stopAllRules() {
+        log("Stopping all rules...")
+        removeAllRoutes()
+        isRulesApplied = false
+        applyResult = .none
+        log("All routes stopped.")
     }
 
     func removeAllRoutes() {
@@ -474,10 +504,15 @@ class RouteManager: ObservableObject {
     func resolveIPsDetailed(for domain: String) async -> ([String], String) {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let dns = AppSettings.shared.dnsServer.isEmpty ? "8.8.8.8" : AppSettings.shared.dnsServer
+                let dns = AppSettings.shared.dnsServer.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // Try dig first with explicit server to avoid bind() errors
-                let digCmd = "dig @\(dns) +short +time=5 +tries=2 \(domain) A 2>&1"
+                // Build dig command: use @server only if DNS is configured
+                let digCmd: String
+                if dns.isEmpty {
+                    digCmd = "dig +short +time=5 +tries=2 \(domain) A 2>&1"
+                } else {
+                    digCmd = "dig @\(dns) +short +time=5 +tries=2 \(domain) A 2>&1"
+                }
                 self.logCommand(digCmd)
                 let raw = shell(digCmd)
 
@@ -489,7 +524,12 @@ class RouteManager: ObservableObject {
 
                 // If dig failed (bind error, etc.), fall back to nslookup
                 if ips.isEmpty && (raw.contains("bind:") || raw.contains("Operation not permitted") || raw.contains("connection timed out")) {
-                    let nsCmd = "nslookup \(domain) \(dns) 2>&1"
+                    let nsCmd: String
+                    if dns.isEmpty {
+                        nsCmd = "nslookup \(domain) 2>&1"
+                    } else {
+                        nsCmd = "nslookup \(domain) \(dns) 2>&1"
+                    }
                     self.logCommand(nsCmd)
                     let nsRaw = shell(nsCmd)
                     // Parse nslookup output: lines after "Name:" containing "Address:"

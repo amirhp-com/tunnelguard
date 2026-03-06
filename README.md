@@ -2,7 +2,7 @@
 
 **macOS VPN Split-Tunnel Manager** — Exclude specific domains from your VPN tunnel with a clean, native macOS interface.
 
-> Version 1.0.0 · Released 2026-03-06 | 1404-12-15
+> Version 1.9.0 · Released 2026-03-06 | 1404-12-15
 >
 > Developer: [Amirhossein Hosseinpour (AmirhpCom)](https://amirhp.com/landing)
 >

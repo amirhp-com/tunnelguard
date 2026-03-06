@@ -287,19 +287,6 @@ struct SidebarView: View {
             }
 
             VStack(spacing: 8) {
-                Button { routeManager.applyAllActiveRules() } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "play.fill").font(.system(size: 11))
-                        Text("Apply Rules").font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 10)
-                    .background(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .leading, endPoint: .trailing))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .shadow(color: Color(hex:"3b82f6").opacity(0.4), radius: 8, y: 3)
-                }
-                .buttonStyle(.plain)
-
                 Button { showAddSheet = true } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus").font(.system(size: 11))
@@ -315,6 +302,45 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 10)
             .padding(.top, 8)
+
+            // Apply / Stop button
+            VStack(spacing: 0) {
+                Button {
+                    if routeManager.isRulesApplied {
+                        routeManager.stopAllRules()
+                    } else {
+                        routeManager.applyAllActiveRules()
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: routeManager.isRulesApplied ? "stop.fill" : "play.fill")
+                            .font(.system(size: 11))
+                        Text(routeManager.isRulesApplied ? "Stop Rules" : "Apply Rules")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(
+                        LinearGradient(
+                            colors: routeManager.isRulesApplied
+                                ? [Color(hex:"059669"), Color(hex:"047857")]
+                                : [Color(hex:"3b82f6"), Color(hex:"1d4ed8")],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .shadow(
+                        color: routeManager.isRulesApplied
+                            ? Color(hex:"059669").opacity(0.4)
+                            : Color(hex:"3b82f6").opacity(0.4),
+                        radius: 8, y: 3
+                    )
+                }
+                .buttonStyle(.plain)
+                .animation(.easeInOut(duration: 0.25), value: routeManager.isRulesApplied)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 14)
             .padding(.bottom, 18)
         }
     }
@@ -666,11 +692,11 @@ struct AddRuleSheet: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        if isAdding { ProgressView().scaleEffect(0.7).tint(.white) }
+                        if isAdding { ProgressView().scaleEffect(0.6).tint(.white).frame(width: 14, height: 14) }
                         Text(isAdding ? "Resolving..." : "Add Rule").font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundColor(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, minHeight: 36).padding(.vertical, 2)
                     .background(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .leading, endPoint: .trailing))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
@@ -954,8 +980,44 @@ struct SettingsView: View {
                             if settings.gatewayMode == .automatic {
                                 HStack {
                                     Text("Detected:").font(.system(size: 13)).foregroundColor(colors.secondaryText)
-                                    Text(settings.detectedGatewayIP.isEmpty ? "Detecting..." : settings.detectedGatewayIP)
-                                        .font(.system(size: 13, design: .monospaced)).foregroundColor(colors.accentGreen)
+                                    if let err = settings.gatewayError {
+                                        // Non-IP detected — show error with copy and switch-to-manual
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(settings.detectedGatewayIP)
+                                                .font(.system(size: 13, design: .monospaced))
+                                                .foregroundColor(colors.accentOrange)
+                                            Text(err)
+                                                .font(.system(size: 11))
+                                                .foregroundColor(colors.accentRed)
+                                            HStack(spacing: 8) {
+                                                Button {
+                                                    NSPasteboard.general.clearContents()
+                                                    NSPasteboard.general.setString(settings.detectedGatewayIP, forType: .string)
+                                                } label: {
+                                                    HStack(spacing: 4) {
+                                                        Image(systemName: "doc.on.doc").font(.system(size: 10))
+                                                        Text("Copy").font(.system(size: 11, weight: .medium))
+                                                    }
+                                                    .foregroundColor(colors.accentBlue)
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Button {
+                                                    settings.gatewayMode = .manual
+                                                } label: {
+                                                    HStack(spacing: 4) {
+                                                        Image(systemName: "pencil").font(.system(size: 10))
+                                                        Text("Enter Manually").font(.system(size: 11, weight: .medium))
+                                                    }
+                                                    .foregroundColor(colors.accentBlue)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                    } else {
+                                        Text(settings.detectedGatewayIP.isEmpty ? "Detecting..." : settings.detectedGatewayIP)
+                                            .font(.system(size: 13, design: .monospaced)).foregroundColor(colors.accentGreen)
+                                    }
                                     Spacer()
                                     Button { settings.detectGateway() } label: {
                                         Image(systemName: "arrow.clockwise").foregroundColor(colors.secondaryText)
@@ -969,9 +1031,29 @@ struct SettingsView: View {
 
                     // DNS
                     SettingsSectionView(title: "DNS Resolution", icon: "server.rack", colors: colors) {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("DNS Server for IP resolution").font(.system(size: 12)).foregroundColor(colors.secondaryText)
-                            GlassTextField(placeholder: "8.8.8.8", text: $settings.dnsServer, colors: colors)
+                            HStack(spacing: 8) {
+                                GlassTextField(placeholder: "Leave empty for system default", text: $settings.dnsServer, colors: colors)
+                                Button {
+                                    settings.dnsServer = settings.effectiveGateway
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.turn.down.left").font(.system(size: 10))
+                                        Text("Use Gateway").font(.system(size: 11, weight: .medium))
+                                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                    }
+                                    .foregroundColor(colors.accentBlue)
+                                    .padding(.horizontal, 10).padding(.vertical, 8)
+                                    .background(colors.inputBg)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(colors.inputBorder, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Text("Leave empty to use system DNS. Or use your gateway IP for local resolution.")
+                                .font(.system(size: 10))
+                                .foregroundColor(colors.secondaryText.opacity(0.7))
                         }
                     }
 
