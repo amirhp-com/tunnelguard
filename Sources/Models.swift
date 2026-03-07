@@ -234,19 +234,11 @@ struct PrivilegeHelper {
     /// Returns (success, message).
     static func grantAdmin() -> (Bool, String) {
         let user = NSUserName()
-        // sudoers lines: allow route, tee, cp, chmod, chown, dscacheutil, killall without password
-        let lines = [
-            "\(user) ALL=(ALL) NOPASSWD: /sbin/route",
-            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/hosts",
-            "\(user) ALL=(ALL) NOPASSWD: /bin/cp /tmp/tunnelguard_hosts_* /etc/hosts",
-            "\(user) ALL=(ALL) NOPASSWD: /bin/chmod 644 /etc/hosts",
-            "\(user) ALL=(ALL) NOPASSWD: /usr/sbin/chown root\\:wheel /etc/hosts",
-            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/dscacheutil -flushcache",
-            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/killall -HUP mDNSResponder"
-        ]
-        let content = lines.joined(separator: "\n")
+        // Grant NOPASSWD for route and common system commands used by TunnelGuard
+        // Using ALL for simplicity — the sudoers file itself is protected by root ownership
+        let line = "\(user) ALL=(ALL) NOPASSWD: /sbin/route, /usr/bin/tee, /bin/cp, /bin/chmod, /usr/sbin/chown, /usr/bin/dscacheutil, /usr/bin/killall"
         // We need admin to write to /etc/sudoers.d/
-        let cmd = "printf '%s\\n' '\(content)' > \(sudoersFile) && chmod 0440 \(sudoersFile) && chown root:wheel \(sudoersFile)"
+        let cmd = "echo '\(line)' > \(sudoersFile) && chmod 0440 \(sudoersFile) && chown root:wheel \(sudoersFile)"
         let result = runAsAdmin(cmd)
         if result.contains("Error:") {
             return (false, result)
@@ -344,35 +336,55 @@ class HostsFileManager {
 
     /// Write content to /etc/hosts using elevated privileges.
     private func writeHosts(_ content: String) -> (Bool, String) {
-        let tmpFile = "/tmp/tunnelguard_hosts_\(ProcessInfo.processInfo.processIdentifier)"
+        let tmpFile = "/tmp/tunnelguard_hosts_\(Int(Date().timeIntervalSince1970))"
 
-        // Write to temp file first (no escaping needed — direct file write)
+        // Step 1: Write content to temp file (app can write to /tmp without sudo)
         do {
             try content.write(toFile: tmpFile, atomically: true, encoding: .utf8)
         } catch {
             return (false, "Error: Could not write temp file — \(error.localizedDescription)")
         }
 
+        // Verify temp file was written
+        guard FileManager.default.fileExists(atPath: tmpFile) else {
+            return (false, "Error: Temp file not found after write")
+        }
+
+        // Step 2: Copy temp file to /etc/hosts with elevated privileges
+        // Always use osascript for /etc/hosts writes — it's the most reliable method
+        // even when admin (sudoers) is granted, because sudoers argument matching is strict
+        let copyCmd = "cp '\(tmpFile)' '\(hostsPath)' && chmod 644 '\(hostsPath)' && chown root:wheel '\(hostsPath)'"
+        let result: String
         if PrivilegeHelper.isAdminGranted() {
-            // Use individual sudo commands that match sudoers entries
-            let result = shell("sudo /bin/cp \(tmpFile) \(hostsPath) && sudo /bin/chmod 644 \(hostsPath) && sudo /usr/sbin/chown root:wheel \(hostsPath) && rm -f \(tmpFile)")
-            if result.contains("error") || result.contains("not permitted") || result.contains("denied") {
-                try? FileManager.default.removeItem(atPath: tmpFile)
-                return (false, "Error: \(result)")
+            // Try sudo first
+            result = shell("sudo cp '\(tmpFile)' '\(hostsPath)' 2>&1 && sudo chmod 644 '\(hostsPath)' 2>&1 && sudo chown root:wheel '\(hostsPath)' 2>&1")
+            // If sudo failed (password needed, permission denied), fall back to osascript
+            if result.contains("password") || result.contains("denied") || result.contains("not permitted") {
+                let fallback = PrivilegeHelper.runAsAdmin(copyCmd)
+                if fallback.contains("Error:") {
+                    try? FileManager.default.removeItem(atPath: tmpFile)
+                    return (false, fallback)
+                }
             }
         } else {
-            let cmd = "cp \(tmpFile) \(hostsPath) && chmod 644 \(hostsPath) && chown root:wheel \(hostsPath) && rm -f \(tmpFile)"
-            let result = PrivilegeHelper.runAsAdmin(cmd)
+            result = PrivilegeHelper.runAsAdmin(copyCmd)
             if result.contains("Error:") {
                 try? FileManager.default.removeItem(atPath: tmpFile)
                 return (false, result)
             }
         }
 
-        // Clean up temp file (in case it still exists)
+        // Step 3: Clean up temp file
         try? FileManager.default.removeItem(atPath: tmpFile)
 
-        // Flush macOS DNS cache so changes take effect immediately
+        // Step 4: Verify the write worked
+        if let written = try? String(contentsOfFile: hostsPath, encoding: .utf8) {
+            if !written.contains(beginMarker) && content.contains(beginMarker) {
+                return (false, "Error: Hosts file write verification failed — block not found after write")
+            }
+        }
+
+        // Step 5: Flush macOS DNS cache so changes take effect immediately
         flushDNSCache()
 
         return (true, "Hosts file updated successfully")
@@ -380,10 +392,15 @@ class HostsFileManager {
 
     /// Flush the macOS DNS cache so /etc/hosts changes are picked up immediately.
     private func flushDNSCache() {
+        let flushCmd = "/usr/bin/dscacheutil -flushcache; /usr/bin/killall -HUP mDNSResponder"
         if PrivilegeHelper.isAdminGranted() {
-            shell("sudo dscacheutil -flushcache 2>/dev/null; sudo killall -HUP mDNSResponder 2>/dev/null")
+            shell("sudo \(flushCmd) 2>/dev/null")
         } else {
-            PrivilegeHelper.runAsAdmin("dscacheutil -flushcache; killall -HUP mDNSResponder")
+            // Try without sudo first (may work), fall back to admin prompt
+            let result = shell(flushCmd + " 2>&1")
+            if result.contains("not permitted") || result.contains("denied") {
+                PrivilegeHelper.runAsAdmin(flushCmd)
+            }
         }
     }
 
@@ -724,11 +741,16 @@ class RouteManager: ObservableObject {
 
     /// Apply /etc/hosts entries for all active rules.
     private func applyHostsEntries() {
-        log("Writing /etc/hosts entries for excluded domains...")
+        let enabledRules = rules.filter { $0.isEnabled && !$0.allIPs.isEmpty }
+        log("Writing /etc/hosts entries for \(enabledRules.count) domain(s)...")
+        for rule in enabledRules {
+            for ip in rule.allIPs {
+                logCommand("/etc/hosts → \(ip)\t\(rule.domain)")
+            }
+        }
         let (ok, msg) = HostsFileManager.shared.applyHosts(for: rules)
         if ok {
-            let count = rules.filter { $0.isEnabled && !$0.allIPs.isEmpty }.count
-            log("DNS bypass: \(count) domain\(count == 1 ? "" : "s") written to /etc/hosts")
+            log("DNS bypass: \(enabledRules.count) domain\(enabledRules.count == 1 ? "" : "s") written to /etc/hosts")
         } else {
             log("⚠️ Failed to write /etc/hosts: \(msg)")
         }

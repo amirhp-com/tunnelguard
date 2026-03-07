@@ -1159,6 +1159,43 @@ struct SettingsView: View {
                                 .font(.system(size: 10))
                                 .foregroundColor(colors.secondaryText.opacity(0.7))
                                 .lineSpacing(3)
+
+                            // View / Locate hosts file buttons
+                            HStack(spacing: 8) {
+                                Button {
+                                    // Open /etc/hosts in default text editor
+                                    NSWorkspace.shared.open(URL(fileURLWithPath: "/etc/hosts"))
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "doc.text").font(.system(size: 10))
+                                        Text("View /etc/hosts").font(.system(size: 11, weight: .medium))
+                                    }
+                                    .foregroundColor(colors.accentBlue)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .background(colors.inputBg)
+                                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(colors.inputBorder, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    // Reveal /etc/hosts in Finder
+                                    NSWorkspace.shared.selectFile("/etc/hosts", inFileViewerRootedAtPath: "/etc")
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "folder").font(.system(size: 10))
+                                        Text("Reveal in Finder").font(.system(size: 11, weight: .medium))
+                                    }
+                                    .foregroundColor(colors.accentBlue)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .background(colors.inputBg)
+                                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(colors.inputBorder, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+
+                                Spacer()
+                            }
                         }
                     }
 
