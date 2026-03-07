@@ -9,7 +9,7 @@
 [![macOS](https://img.shields.io/badge/macOS-13.0%2B-green)](https://github.com/amirhp-com/tunnelguard)
 [![License](https://img.shields.io/badge/License-WTFPL-orange)](https://github.com/amirhp-com/tunnelguard/blob/main/LICENSE)
 
-> **Version 1.9.0** · Released 2026-03-06 · 1404-12-15
+> **Version 1.9.5** · Released 2026-03-07 · 1404-12-16
 >
 > Developer: [Amirhossein Hosseinpour (AmirhpCom)](https://amirhp.com/landing) · [GitHub](https://github.com/amirhp-com)
 >
@@ -238,6 +238,11 @@ The developer assumes **no responsibility** for network disruptions, security in
 ---
 
 ## Changelog
+
+### v1.9.5 — 2026-03-07
+- Added menu-bar icon change automatically when toggling rules on/off
+- Changed App sidebar rules count and color (green when active, gray when idle)
+- Changed menu-bar items and icons to reflect active/inactive state
 
 ### v1.9.0 — 2026-03-06
 
