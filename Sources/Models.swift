@@ -733,48 +733,104 @@ class RouteManager: ObservableObject {
             return
         }
 
-        // Single password prompt for all commands (or direct sudo if granted)
-        let result = runElevatedBatch(commands)
-        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasError = trimmed.contains("Error:") || trimmed.contains("error") || trimmed.contains("not permitted")
+        let writeHosts = AppSettings.shared.writeToHosts
+        let enabledCount = rules.filter { $0.isEnabled }.count
+        let currentRules = rules
 
-        if !trimmed.isEmpty {
-            for line in trimmed.components(separatedBy: "\n") {
-                let l = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !l.isEmpty { log("→ \(l)") }
+        // Run shell commands on background thread to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = self.runElevatedBatch(commands)
+            let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasError = trimmed.contains("Error:") || trimmed.contains("error") || trimmed.contains("not permitted")
+
+            // Write /etc/hosts entries if enabled (also on background thread)
+            var hostsOk = true
+            var hostsMsg = ""
+            if writeHosts {
+                let (ok, msg) = HostsFileManager.shared.applyHosts(for: currentRules)
+                hostsOk = ok
+                hostsMsg = msg
             }
-        }
 
-        let count = rules.filter { $0.isEnabled }.count
-        isApplying = false
+            DispatchQueue.main.async {
+                if !trimmed.isEmpty {
+                    for line in trimmed.components(separatedBy: "\n") {
+                        let l = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !l.isEmpty { self.log("→ \(l)") }
+                    }
+                }
 
-        if hasError {
-            applyResult = .error("Some routes failed — check log")
-            log("⚠️ Completed with errors.")
-        } else {
-            isRulesApplied = true
-            saveAppliedState()
-            applyResult = .success(count)
-            log("Done applying \(count) rules.")
-        }
+                self.isApplying = false
 
-        // Write /etc/hosts entries if enabled
-        if AppSettings.shared.writeToHosts {
-            applyHostsEntries()
+                if hasError {
+                    self.applyResult = .error("Some routes failed — check log")
+                    self.log("⚠️ Completed with errors.")
+                } else {
+                    self.isRulesApplied = true
+                    self.saveAppliedState()
+                    self.applyResult = .success(enabledCount)
+                    self.log("Done applying \(enabledCount) rules.")
+                }
+
+                if writeHosts {
+                    if hostsOk {
+                        let count = currentRules.filter { $0.isEnabled && !$0.allIPs.isEmpty }.count
+                        self.log("DNS bypass: \(count) domain\(count == 1 ? "" : "s") written to /etc/hosts")
+                    } else {
+                        self.log("⚠️ Failed to write /etc/hosts: \(hostsMsg)")
+                    }
+                    NotificationCenter.default.post(name: Notification.Name("TunnelGuardHostsFileChanged"), object: nil)
+                }
+            }
         }
     }
 
     func stopAllRules() {
         log("Stopping all rules...")
-        removeAllRoutes()
-        // Remove /etc/hosts entries if they exist
-        if AppSettings.shared.writeToHosts || HostsFileManager.shared.hasHostsEntries() {
-            removeHostsEntries()
+
+        var commands: [String] = []
+        for rule in rules {
+            for ip in rule.allIPs {
+                commands.append("route -n delete \(ip) 2>&1 || true")
+                logCommand("route -n delete \(ip)")
+            }
         }
-        isRulesApplied = false
-        saveAppliedState()
-        applyResult = .none
-        log("All routes stopped.")
+
+        let shouldRemoveHosts = AppSettings.shared.writeToHosts || HostsFileManager.shared.hasHostsEntries()
+
+        // Run shell commands on background thread
+        DispatchQueue.global(qos: .userInitiated).async {
+            if !commands.isEmpty {
+                self.runElevatedBatch(commands)
+            }
+
+            // Remove /etc/hosts entries if they exist
+            var hostsOk = true
+            var hostsMsg = ""
+            if shouldRemoveHosts {
+                let (ok, msg) = HostsFileManager.shared.removeHosts()
+                hostsOk = ok
+                hostsMsg = msg
+            }
+
+            DispatchQueue.main.async {
+                self.isRulesApplied = false
+                self.saveAppliedState()
+                self.applyResult = .none
+                self.log("All routes removed.")
+
+                if shouldRemoveHosts {
+                    if hostsOk {
+                        self.log("DNS bypass: /etc/hosts entries removed")
+                    } else {
+                        self.log("⚠️ Failed to clean /etc/hosts: \(hostsMsg)")
+                    }
+                    NotificationCenter.default.post(name: Notification.Name("TunnelGuardHostsFileChanged"), object: nil)
+                }
+
+                self.log("All routes stopped.")
+            }
+        }
     }
 
     func removeAllRoutes() {

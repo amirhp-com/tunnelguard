@@ -9,7 +9,7 @@
 [![macOS](https://img.shields.io/badge/macOS-13.0%2B-green)](https://github.com/amirhp-com/tunnelguard)
 [![License](https://img.shields.io/badge/License-WTFPL-orange)](https://github.com/amirhp-com/tunnelguard/blob/main/LICENSE)
 
-> **Version 1.9.5** · Released 2026-03-07 · 1404-12-16
+> **Version 2.0.0** · Released 2026-03-07 · 1404-12-16
 >
 > Developer: [Amirhossein Hosseinpour (AmirhpCom)](https://amirhp.com/landing) · [GitHub](https://github.com/amirhp-com)
 >
@@ -21,13 +21,13 @@
 
 ### Step 1: Download
 
-👉 **[Download TunnelGuard v1.9.0 (DMG)](https://github.com/amirhp-com/tunnelguard/releases/latest)**
+👉 **[Download TunnelGuard (DMG)](https://github.com/amirhp-com/tunnelguard/releases/latest)**
 
 Or go to [Releases](https://github.com/amirhp-com/tunnelguard/releases) to see all versions.
 
 ### Step 2: Install from DMG
 
-1. **Open** the downloaded `TunnelGuard-installer.dmg` file
+1. **Open** the downloaded `TunnelGuard.dmg` file
 2. **Drag** the TunnelGuard icon into the Applications folder shortcut shown in the window
 3. **Eject** the DMG from Finder sidebar (optional)
 4. **Open** TunnelGuard from your Applications folder
@@ -239,13 +239,25 @@ The developer assumes **no responsibility** for network disruptions, security in
 
 ## Changelog
 
+### v2.0.0 — 2026-03-07
+- **DNS Bypass (`/etc/hosts`)** — New setting to write resolved IPs directly to `/etc/hosts`, bypassing VPN DNS completely. Solves the issue where VPN overrides DNS settings and excluded domains with locally-hosted nameservers fail to resolve. Entries are managed inside a `## TunnelGuard - Start ##` / `## TunnelGuard - End ##` block, matching the format used by Local and WordPress Studio.
+- **VPN DNS detection** — Settings now shows which DNS servers your VPN has pushed (parsed from `scutil --dns`), with a warning when VPN DNS override is detected
+- **Current hosts entries display** — DNS Bypass section shows the actual `/etc/hosts` entries written by TunnelGuard in real-time
+- **DNS cache flush** — Automatically runs `dscacheutil -flushcache` and `killall -HUP mDNSResponder` after every hosts file change so changes take effect immediately
+- **Route state persistence** — Applied/stopped state is saved to UserDefaults and restored on next launch
+- **Existing route detection** — On startup, checks `netstat -nr` for routes from a previous session. If routes are still active after a force-quit, the UI reflects the correct state without re-applying
+- **Startup diagnostics log** — Logs detailed startup info: app version, rule count, gateway IP, DNS server, VPN DNS servers, hosts file status, admin access status, and launch settings
+- **Non-blocking route operations** — Apply and stop operations now run shell commands on a background thread, preventing UI and menu bar freezes during route changes
+- **Expanded admin access** — Sudoers entry now covers `/bin/cp`, `/bin/chmod`, `/usr/sbin/chown`, `/usr/bin/dscacheutil`, and `/usr/bin/killall` in addition to `/sbin/route`, enabling passwordless `/etc/hosts` management. Requires re-granting admin access after update.
+- **Delete confirmation stays on Rules tab** — Moved delete confirmation alert from ContentView into RulesView to prevent tab switching when deleting a rule
+- **Single window enforcement** — Clicking the dock icon now shows the existing window instead of creating a duplicate
+
 ### v1.9.5 — 2026-03-07
-- Added menu-bar icon change automatically when toggling rules on/off
-- Changed App sidebar rules count and color (green when active, gray when idle)
-- Changed menu-bar items and icons to reflect active/inactive state
+- **Menu-bar icon** — changes automatically between shield and network icon when toggling rules on/off
+- **Sidebar status badge** — rules count and indicator color update dynamically (green when active, gray when idle)
+- **Menu-bar context menu** — items and icons reflect current active/inactive state
 
 ### v1.9.0 — 2026-03-06
-
 - Admin access grant/revoke from Settings (sudoers entry for `/sbin/route`)
 - Smart DNS resolution — leave DNS field empty for system default, or use gateway IP
 - Gateway IP validation — detects invalid results like `link#28` with copy & manual entry options

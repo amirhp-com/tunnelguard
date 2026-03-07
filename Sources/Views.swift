@@ -1457,7 +1457,7 @@ struct AboutView: View {
                 }
                 .padding(.top, 32)
 
-                VStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("DEVELOPER").font(.system(size: 10, weight: .semibold)).foregroundColor(colors.secondaryText)
                     HStack(spacing: 16) {
                         Circle()
@@ -1474,11 +1474,11 @@ struct AboutView: View {
                             LinkButton(title: "GitHub", url: "https://github.com/amirhp-com", icon: "chevron.left.forwardslash.chevron.right", colors: colors)
                         }
                     }
-                    .padding(16)
-                    .background(colors.panelBg)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(colors.panelBorder, lineWidth: 1))
                 }
+                .padding(16)
+                .background(colors.panelBg)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(colors.panelBorder, lineWidth: 1))
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
@@ -1489,6 +1489,7 @@ struct AboutView: View {
                         .font(.system(size: 12)).foregroundColor(colors.secondaryText).lineSpacing(4)
                 }
                 .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(colors.accentOrange.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(colors.accentOrange.opacity(0.15), lineWidth: 1))
