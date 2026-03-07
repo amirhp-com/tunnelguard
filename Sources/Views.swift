@@ -982,6 +982,7 @@ struct SettingsView: View {
     @State private var showSavedToast = false
     @State private var adminGranted = PrivilegeHelper.isAdminGranted()
     @State private var adminStatusMsg: String? = nil
+    @State private var hostsActive = HostsFileManager.shared.hasHostsEntries()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -1078,6 +1079,38 @@ struct SettingsView: View {
                             Text("Leave empty to use system DNS. Or use your gateway IP for local resolution.")
                                 .font(.system(size: 10))
                                 .foregroundColor(colors.secondaryText.opacity(0.7))
+                        }
+                    }
+
+                    // DNS Bypass (/etc/hosts)
+                    SettingsSectionView(title: "DNS Bypass (Local Hosts)", icon: "doc.text.magnifyingglass", colors: colors) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            GlassToggleRow(label: "Write domains to /etc/hosts", isOn: $settings.writeToHosts, colors: colors)
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(colors.accentBlue)
+                                Text("If excluded domains are not loading even after IP routing is applied, enable this option. It writes resolved IPs directly to /etc/hosts so your Mac can resolve them locally — bypassing VPN DNS completely.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(colors.secondaryText)
+                                    .lineSpacing(3)
+                            }
+
+                            // Status indicator
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(hostsActive ? colors.accentGreen : colors.secondaryText)
+                                    .frame(width: 7, height: 7)
+                                Text(hostsActive ? "Hosts entries active" : "No hosts entries")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(hostsActive ? colors.accentGreen : colors.secondaryText)
+                            }
+
+                            Text("When enabled, TunnelGuard adds entries like \"31.214.255.152 example.com\" to /etc/hosts when rules are applied, and removes them when rules are stopped. This is useful when your VPN overrides DNS settings and the excluded domain's nameservers are not reachable from the VPN's DNS server.")
+                                .font(.system(size: 10))
+                                .foregroundColor(colors.secondaryText.opacity(0.7))
+                                .lineSpacing(3)
                         }
                     }
 
@@ -1210,6 +1243,7 @@ struct SettingsView: View {
         .modifier(ToastOverlay(message: "Settings saved", icon: "checkmark.circle.fill", iconColor: colors.accentGreen, isShowing: showSavedToast, colors: colors))
         .onReceive(NotificationCenter.default.publisher(for: .settingsSaved)) { _ in
             withAnimation { showSavedToast = true }
+            hostsActive = HostsFileManager.shared.hasHostsEntries()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { withAnimation { showSavedToast = false } }
         }
         .environmentObject(settings)

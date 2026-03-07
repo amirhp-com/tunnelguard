@@ -36,6 +36,7 @@ class AppSettings: ObservableObject {
     @Published var showInDock: Bool = true
     @Published var themeMode: ThemeMode = .system
     @Published var presenceMode: PresenceMode = .both
+    @Published var writeToHosts: Bool = false
 
     enum GatewayMode: String, CaseIterable, Codable {
         case automatic = "Automatic"
@@ -103,7 +104,8 @@ class AppSettings: ObservableObject {
             "dnsServer": dnsServer,
             "showInDock": showInDock,
             "themeMode": themeMode.rawValue,
-            "presenceMode": presenceMode.rawValue
+            "presenceMode": presenceMode.rawValue,
+            "writeToHosts": writeToHosts
         ]
         UserDefaults.standard.set(data, forKey: settingsKey)
         updateLoginItem()
@@ -126,6 +128,7 @@ class AppSettings: ObservableObject {
         showInDock = data["showInDock"] as? Bool ?? true
         if let tm = data["themeMode"] as? String { themeMode = ThemeMode(rawValue: tm) ?? .system }
         if let pm = data["presenceMode"] as? String { presenceMode = PresenceMode(rawValue: pm) ?? .both }
+        writeToHosts = data["writeToHosts"] as? Bool ?? false
     }
 
     private func updateLoginItem() {
@@ -253,6 +256,132 @@ struct PrivilegeHelper {
     }
 }
 
+// MARK: - Hosts File Manager
+class HostsFileManager {
+    static let shared = HostsFileManager()
+
+    private let hostsPath = "/etc/hosts"
+    private let beginMarker = "# TunnelGuard BEGIN — managed by TunnelGuard, do not edit manually"
+    private let endMarker   = "# TunnelGuard END"
+
+    /// Build hosts entries from the given rules (only enabled rules with IPs).
+    private func buildEntries(for rules: [RouteRule]) -> String {
+        var lines: [String] = []
+        for rule in rules where rule.isEnabled && !rule.allIPs.isEmpty {
+            // Add each IP as a separate line pointing to the domain
+            for ip in rule.allIPs {
+                lines.append("\(ip)\t\(rule.domain)")
+            }
+        }
+        guard !lines.isEmpty else { return "" }
+        return "\(beginMarker)\n" + lines.joined(separator: "\n") + "\n\(endMarker)"
+    }
+
+    /// Read the current /etc/hosts content, stripping any existing TunnelGuard block.
+    private func readHostsWithoutBlock() -> String {
+        guard let content = try? String(contentsOfFile: hostsPath, encoding: .utf8) else { return "" }
+        // Remove existing TunnelGuard block (including markers)
+        var result: [String] = []
+        var inBlock = false
+        for line in content.components(separatedBy: "\n") {
+            if line.hasPrefix(beginMarker) || line.trimmingCharacters(in: .whitespaces) == beginMarker.trimmingCharacters(in: .whitespaces) {
+                inBlock = true
+                continue
+            }
+            if line.hasPrefix(endMarker) || line.trimmingCharacters(in: .whitespaces) == endMarker.trimmingCharacters(in: .whitespaces) {
+                inBlock = false
+                continue
+            }
+            if !inBlock {
+                result.append(line)
+            }
+        }
+        // Remove trailing empty lines that we may have added
+        while result.last?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            result.removeLast()
+        }
+        return result.joined(separator: "\n")
+    }
+
+    /// Write the TunnelGuard block to /etc/hosts for all active rules.
+    /// Uses sudo if admin is granted, otherwise osascript admin prompt.
+    func applyHosts(for rules: [RouteRule]) -> (Bool, String) {
+        let block = buildEntries(for: rules)
+        let existing = readHostsWithoutBlock()
+
+        // Build new content: existing + blank line + TunnelGuard block
+        var newContent = existing
+        if !newContent.hasSuffix("\n") { newContent += "\n" }
+        if !block.isEmpty {
+            newContent += "\n\(block)\n"
+        }
+
+        return writeHosts(newContent)
+    }
+
+    /// Remove the TunnelGuard block from /etc/hosts.
+    func removeHosts() -> (Bool, String) {
+        let existing = readHostsWithoutBlock()
+        var newContent = existing
+        if !newContent.hasSuffix("\n") { newContent += "\n" }
+        return writeHosts(newContent)
+    }
+
+    /// Update hosts entry for a single rule (re-applies all active rules).
+    func updateHosts(for rules: [RouteRule]) -> (Bool, String) {
+        return applyHosts(for: rules)
+    }
+
+    /// Write content to /etc/hosts using elevated privileges.
+    private func writeHosts(_ content: String) -> (Bool, String) {
+        // Escape single quotes in content for shell
+        let escaped = content.replacingOccurrences(of: "'", with: "'\\''")
+        let tmpFile = "/tmp/tunnelguard_hosts_\(ProcessInfo.processInfo.processIdentifier)"
+
+        // Write to temp file first, then move with sudo
+        do {
+            try escaped.write(toFile: tmpFile, atomically: true, encoding: .utf8)
+        } catch {
+            return (false, "Error: Could not write temp file — \(error.localizedDescription)")
+        }
+
+        let cmd = "cp \(tmpFile) \(hostsPath) && chmod 644 \(hostsPath) && chown root:wheel \(hostsPath) && rm -f \(tmpFile)"
+
+        let result: String
+        if PrivilegeHelper.isAdminGranted() {
+            result = shell("sudo \(cmd)")
+        } else {
+            result = PrivilegeHelper.runAsAdmin(cmd)
+        }
+
+        if result.contains("Error:") {
+            // Clean up temp file
+            try? FileManager.default.removeItem(atPath: tmpFile)
+            return (false, result)
+        }
+
+        // Flush macOS DNS cache so changes take effect immediately
+        flushDNSCache()
+
+        return (true, "Hosts file updated successfully")
+    }
+
+    /// Flush the macOS DNS cache so /etc/hosts changes are picked up immediately.
+    private func flushDNSCache() {
+        if PrivilegeHelper.isAdminGranted() {
+            shell("sudo dscacheutil -flushcache 2>/dev/null; sudo killall -HUP mDNSResponder 2>/dev/null")
+        } else {
+            PrivilegeHelper.runAsAdmin("dscacheutil -flushcache; killall -HUP mDNSResponder")
+        }
+    }
+
+    /// Check if TunnelGuard block currently exists in /etc/hosts.
+    func hasHostsEntries() -> Bool {
+        guard let content = try? String(contentsOfFile: hostsPath, encoding: .utf8) else { return false }
+        return content.contains(beginMarker)
+    }
+}
+
 // MARK: - Route Manager
 class RouteManager: ObservableObject {
     static let shared = RouteManager()
@@ -328,6 +457,10 @@ class RouteManager: ObservableObject {
         removeRoutes(for: rule)
         rules.removeAll { $0.id == rule.id }
         saveRules()
+        // Update /etc/hosts if enabled
+        if AppSettings.shared.writeToHosts {
+            syncHostsFile()
+        }
         log("Removed rule for \(rule.domain)")
         ruleToDelete = nil
     }
@@ -345,6 +478,10 @@ class RouteManager: ObservableObject {
             removeRoutes(for: rules[idx])
         }
         saveRules()
+        // Update /etc/hosts if enabled
+        if AppSettings.shared.writeToHosts && isRulesApplied {
+            syncHostsFile()
+        }
         log("\(rules[idx].isEnabled ? "Enabled" : "Disabled") rule for \(rule.domain)")
     }
 
@@ -355,6 +492,10 @@ class RouteManager: ObservableObject {
         if let n = newNotes { rules[idx].notes = n }
         if let ips = newManualIPs { rules[idx].manualIPs = ips }
         saveRules()
+        // Update /etc/hosts if enabled and rules are applied
+        if AppSettings.shared.writeToHosts && isRulesApplied {
+            syncHostsFile()
+        }
         log("Updated rule for \(rules[idx].domain)")
     }
 
@@ -382,6 +523,10 @@ class RouteManager: ObservableObject {
                     applyRoutes(for: rules[idx])
                 }
                 saveRules()
+                // Update /etc/hosts with new IPs if enabled
+                if AppSettings.shared.writeToHosts && isRulesApplied {
+                    syncHostsFile()
+                }
                 refreshResult = .success(rule.domain, ips.count)
                 log("Refreshed IPs for \(rule.domain) → \(ips.joined(separator: ", "))")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
@@ -443,11 +588,20 @@ class RouteManager: ObservableObject {
             applyResult = .success(count)
             log("Done applying \(count) rules.")
         }
+
+        // Write /etc/hosts entries if enabled
+        if AppSettings.shared.writeToHosts {
+            applyHostsEntries()
+        }
     }
 
     func stopAllRules() {
         log("Stopping all rules...")
         removeAllRoutes()
+        // Remove /etc/hosts entries if they exist
+        if AppSettings.shared.writeToHosts || HostsFileManager.shared.hasHostsEntries() {
+            removeHostsEntries()
+        }
         isRulesApplied = false
         applyResult = .none
         log("All routes stopped.")
@@ -510,6 +664,41 @@ class RouteManager: ObservableObject {
             return shell(joined)
         } else {
             return PrivilegeHelper.runBatchAsAdmin(commands)
+        }
+    }
+
+    // MARK: - /etc/hosts Management
+
+    /// Apply /etc/hosts entries for all active rules.
+    private func applyHostsEntries() {
+        log("Writing /etc/hosts entries for excluded domains...")
+        let (ok, msg) = HostsFileManager.shared.applyHosts(for: rules)
+        if ok {
+            let count = rules.filter { $0.isEnabled && !$0.allIPs.isEmpty }.count
+            log("DNS bypass: \(count) domain\(count == 1 ? "" : "s") written to /etc/hosts")
+        } else {
+            log("⚠️ Failed to write /etc/hosts: \(msg)")
+        }
+    }
+
+    /// Remove TunnelGuard entries from /etc/hosts.
+    private func removeHostsEntries() {
+        log("Removing /etc/hosts entries...")
+        let (ok, msg) = HostsFileManager.shared.removeHosts()
+        if ok {
+            log("DNS bypass: /etc/hosts entries removed")
+        } else {
+            log("⚠️ Failed to clean /etc/hosts: \(msg)")
+        }
+    }
+
+    /// Sync /etc/hosts with current rules (used when toggling/editing individual rules).
+    func syncHostsFile() {
+        let (ok, msg) = HostsFileManager.shared.applyHosts(for: rules)
+        if ok {
+            log("DNS bypass: /etc/hosts updated")
+        } else {
+            log("⚠️ Failed to update /etc/hosts: \(msg)")
         }
     }
 
