@@ -472,6 +472,7 @@ class RouteManager: ObservableObject {
     @Published var refreshResult: RefreshResult = .none
 
     private let rulesKey = "TunnelGuardRules"
+    private let appliedStateKey = "TunnelGuardRulesApplied"
 
     func loadRules() {
         if let data = UserDefaults.standard.data(forKey: rulesKey),
@@ -486,6 +487,94 @@ class RouteManager: ObservableObject {
             UserDefaults.standard.set(encoded, forKey: rulesKey)
         }
         updateCount()
+    }
+
+    /// Persist applied state so we can restore it after force-quit
+    private func saveAppliedState() {
+        UserDefaults.standard.set(isRulesApplied, forKey: appliedStateKey)
+    }
+
+    /// Check if routes from a previous session are still active in the routing table.
+    /// Looks for any of our rule IPs in `netstat -nr` output.
+    func detectExistingRoutes() {
+        let gw = AppSettings.shared.effectiveGateway
+        guard !gw.isEmpty else { return }
+
+        let netstatOutput = shell("netstat -nr 2>/dev/null")
+        var foundCount = 0
+
+        for rule in rules where rule.isEnabled {
+            for ip in rule.allIPs {
+                // Check if this IP has a route through our gateway
+                if netstatOutput.contains(ip) {
+                    foundCount += 1
+                }
+            }
+        }
+
+        if foundCount > 0 {
+            isRulesApplied = true
+            saveAppliedState()
+            log("Detected \(foundCount) active route(s) from previous session")
+        } else {
+            // Check if we previously had rules applied (saved state)
+            let wasApplied = UserDefaults.standard.bool(forKey: appliedStateKey)
+            if wasApplied {
+                // Routes were applied but are now gone (reboot cleared them)
+                isRulesApplied = false
+                saveAppliedState()
+                log("Previous routes were cleared (system reboot or network change)")
+            }
+        }
+    }
+
+    /// Log startup information — version, rules, gateway, hosts, DNS
+    func logStartupInfo() {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let settings = AppSettings.shared
+
+        log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        log("TunnelGuard v\(version) (\(build)) started")
+        log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        // Rules summary
+        let total = rules.count
+        let enabled = rules.filter { $0.isEnabled }.count
+        let totalIPs = rules.filter { $0.isEnabled }.flatMap { $0.allIPs }.count
+        log("Rules: \(total) total, \(enabled) enabled, \(totalIPs) IPs to route")
+
+        // Gateway
+        let gwMode = settings.gatewayMode == .automatic ? "auto" : "manual"
+        let gwIP = settings.effectiveGateway
+        if let gwErr = settings.gatewayError {
+            log("Gateway: \(gwIP) (\(gwMode)) ⚠️ \(gwErr)")
+        } else {
+            log("Gateway: \(gwIP.isEmpty ? "not detected" : gwIP) (\(gwMode))")
+        }
+
+        // DNS
+        let dns = settings.dnsServer.trimmingCharacters(in: .whitespacesAndNewlines)
+        log("DNS Server: \(dns.isEmpty ? "system default" : dns)")
+
+        // VPN DNS
+        let vpnDNS = HostsFileManager.detectVPNDNS()
+        if !vpnDNS.isEmpty {
+            log("VPN DNS: \(vpnDNS.joined(separator: ", "))")
+        }
+
+        // Hosts file
+        let hostsActive = HostsFileManager.shared.hasHostsEntries()
+        let hostsEnabled = settings.writeToHosts
+        log("DNS Bypass: \(hostsEnabled ? "enabled" : "disabled")\(hostsActive ? ", hosts entries active" : "")")
+
+        // Admin access
+        let admin = PrivilegeHelper.isAdminGranted()
+        log("Admin Access: \(admin ? "granted" : "not granted")")
+
+        // Startup settings
+        log("Apply on launch: \(settings.applyOnLaunch ? "yes" : "no"), Launch at startup: \(settings.runOnStartup ? "yes" : "no")")
+        log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     }
 
     private func updateCount() {
@@ -655,6 +744,7 @@ class RouteManager: ObservableObject {
             log("⚠️ Completed with errors.")
         } else {
             isRulesApplied = true
+            saveAppliedState()
             applyResult = .success(count)
             log("Done applying \(count) rules.")
         }
@@ -673,6 +763,7 @@ class RouteManager: ObservableObject {
             removeHostsEntries()
         }
         isRulesApplied = false
+        saveAppliedState()
         applyResult = .none
         log("All routes stopped.")
     }

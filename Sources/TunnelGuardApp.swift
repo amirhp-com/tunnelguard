@@ -72,7 +72,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Apply saved presence mode immediately
         applyPresencePolicy()
 
-        if AppSettings.shared.applyOnLaunch {
+        // Log startup info
+        RouteManager.shared.logStartupInfo()
+
+        // Detect if routes from a previous session are still active
+        RouteManager.shared.detectExistingRoutes()
+
+        if RouteManager.shared.isRulesApplied {
+            // Routes are already active from previous session — just update the UI state
+            RouteManager.shared.log("Routes still active from previous session — ready to manage")
+        } else if AppSettings.shared.applyOnLaunch {
+            // No existing routes — apply fresh
             RouteManager.shared.applyAllActiveRules()
         }
 
