@@ -270,8 +270,8 @@ class HostsFileManager {
     static let shared = HostsFileManager()
 
     private let hostsPath = "/etc/hosts"
-    private let beginMarker = "# TunnelGuard BEGIN — managed by TunnelGuard, do not edit manually"
-    private let endMarker   = "# TunnelGuard END"
+    private let beginMarker = "## TunnelGuard - Start ##"
+    private let endMarker   = "## TunnelGuard - End ##"
 
     /// Build hosts entries from the given rules (only enabled rules with IPs).
     private func buildEntries(for rules: [RouteRule]) -> String {
@@ -293,11 +293,12 @@ class HostsFileManager {
         var result: [String] = []
         var inBlock = false
         for line in content.components(separatedBy: "\n") {
-            if line.hasPrefix(beginMarker) || line.trimmingCharacters(in: .whitespaces) == beginMarker.trimmingCharacters(in: .whitespaces) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == beginMarker {
                 inBlock = true
                 continue
             }
-            if line.hasPrefix(endMarker) || line.trimmingCharacters(in: .whitespaces) == endMarker.trimmingCharacters(in: .whitespaces) {
+            if trimmed == endMarker {
                 inBlock = false
                 continue
             }
@@ -399,11 +400,11 @@ class HostsFileManager {
         var inBlock = false
         for line in content.components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("# TunnelGuard BEGIN") {
+            if trimmed == beginMarker {
                 inBlock = true
                 continue
             }
-            if trimmed.hasPrefix("# TunnelGuard END") {
+            if trimmed == endMarker {
                 inBlock = false
                 continue
             }

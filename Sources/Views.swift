@@ -157,20 +157,6 @@ struct ContentView: View {
                 set: { if !$0 { editingRule = nil } }
             ), colors: colors)
         }
-        // Delete confirmation alert
-        .alert("Delete Rule", isPresented: Binding(
-            get: { routeManager.ruleToDelete != nil },
-            set: { if !$0 { routeManager.cancelDelete() } }
-        )) {
-            Button("Cancel", role: .cancel) { routeManager.cancelDelete() }
-            Button("Delete", role: .destructive) {
-                if let r = routeManager.ruleToDelete { routeManager.removeRule(r) }
-            }
-        } message: {
-            if let r = routeManager.ruleToDelete {
-                Text("Are you sure you want to delete the rule for \"\(r.domain)\"? This will also remove its routes.")
-            }
-        }
         .environmentObject(routeManager)
         .environmentObject(settings)
         .preferredColorScheme(settings.themeMode == .dark ? .dark : settings.themeMode == .light ? .light : nil)
@@ -526,6 +512,20 @@ struct RulesView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: routeManager.lastError)
+        // Delete confirmation alert — kept inside RulesView to prevent tab switching
+        .alert("Delete Rule", isPresented: Binding(
+            get: { routeManager.ruleToDelete != nil },
+            set: { if !$0 { routeManager.cancelDelete() } }
+        )) {
+            Button("Cancel", role: .cancel) { routeManager.cancelDelete() }
+            Button("Delete", role: .destructive) {
+                if let r = routeManager.ruleToDelete { routeManager.removeRule(r) }
+            }
+        } message: {
+            if let r = routeManager.ruleToDelete {
+                Text("Are you sure you want to delete the rule for \"\(r.domain)\"? This will also remove its routes.")
+            }
+        }
     }
 }
 
