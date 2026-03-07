@@ -90,7 +90,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenuBarItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = statusItem?.button else { return }
-        button.image = NSImage(systemSymbolName: "shield.lefthalf.filled",
+        button.image = NSImage(systemSymbolName: RouteManager.shared.isRulesApplied ? "network" : "network.badge.shield.half.filled",
                                accessibilityDescription: "TunnelGuard")
         button.target = self
         button.action = #selector(menuBarButtonClicked(_:))
@@ -98,11 +98,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuBarButtonClicked(_ sender: NSStatusBarButton) {
-        if NSApp.currentEvent?.type == .rightMouseUp {
-            showContextMenu()
-        } else {
-            showMainWindow()
-        }
+        showContextMenu()
+//        if NSApp.currentEvent?.type == .rightMouseUp {
+//            showContextMenu()
+//        } else {
+//            showMainWindow()
+//        }
     }
 
     private func showContextMenu() {
@@ -110,30 +111,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        let count = RouteManager.shared.activeRulesCount
+        
+        let openItem = NSMenuItem(title: "Open TunnelGuard", action: #selector(showMainWindow), keyEquivalent: "")
+        openItem.target = self
+        openItem.image = NSImage(systemSymbolName: "shield.lefthalf.filled", accessibilityDescription: "App Icon")
+        menu.addItem(openItem)
+    
+
+        let applyItem = NSMenuItem(title: RouteManager.shared.isRulesApplied ? "Stop Rules" : "Apply Rules", action: #selector(toggleFromMenu), keyEquivalent: "")
+        applyItem.target = self
+        applyItem.image = NSImage(systemSymbolName: RouteManager.shared.isRulesApplied ? "stop.fill" : "play.fill", accessibilityDescription: "Setting Icon")
+        menu.addItem(applyItem)
+
+        
+        menu.addItem(.separator())
+       
+        let statusLabel = NSMenuItem( title: "\(count) active rule\(count == 1 ? "" : "s")", action: nil, keyEquivalent: "")
+        statusLabel.isEnabled = false
+        menu.addItem(statusLabel)
+        
         let header = NSMenuItem(title: "TunnelGuard v\(version) (\(build))", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
+        
         menu.addItem(.separator())
 
-        let count = RouteManager.shared.activeRulesCount
-        let statusLabel = NSMenuItem(
-            title: "\(count) active rule\(count == 1 ? "" : "s")",
-            action: nil, keyEquivalent: "")
-        statusLabel.isEnabled = false
-        menu.addItem(statusLabel)
-        menu.addItem(.separator())
-
-        let openItem = NSMenuItem(title: "Open TunnelGuard", action: #selector(showMainWindow), keyEquivalent: "")
-        openItem.target = self
-        menu.addItem(openItem)
-
-        let applyItem = NSMenuItem(title: "Apply All Rules", action: #selector(applyAllFromMenu), keyEquivalent: "")
-        applyItem.target = self
-        menu.addItem(applyItem)
-
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(title: "Quit TunnelGuard", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
@@ -153,6 +157,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func applyAllFromMenu() {
         RouteManager.shared.applyAllActiveRules()
+    }
+    @objc private func toggleFromMenu() {
+        if RouteManager.shared.isRulesApplied {
+            return RouteManager.shared.stopAllRules()
+        }else{
+            return RouteManager.shared.applyAllActiveRules()
+        }
+    }
+    @objc private func stopAllFromMenu() {
+        RouteManager.shared.stopAllRules()
     }
 
     // MARK: - Dock / MenuBar Visibility

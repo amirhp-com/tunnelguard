@@ -1,5 +1,7 @@
+import Cocoa
 import Foundation
 import Combine
+import AppKit
 
 // MARK: - Route Rule Model
 struct RouteRule: Identifiable, Codable, Equatable {
@@ -456,6 +458,7 @@ class RouteManager: ObservableObject {
         for rule in rules {
             for ip in rule.allIPs {
                 commands.append("route -n delete \(ip) 2>&1 || true")
+                logCommand("route -n delete \(ip)")
             }
         }
         if !commands.isEmpty {
