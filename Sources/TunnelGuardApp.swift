@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Foundation
+import Combine
 
 // MARK: - App Entry Point
 @main
@@ -36,7 +37,8 @@ struct TunnelGuardApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     private var mainWindow: NSWindow?
-
+    private var cancellables = Set<AnyCancellable>()
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         // ── Single-instance enforcement ──
         let bundleID = Bundle.main.bundleIdentifier ?? "com.amirhpcom.tunnelguard"
@@ -90,11 +92,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenuBarItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = statusItem?.button else { return }
-        button.image = NSImage(systemSymbolName: RouteManager.shared.isRulesApplied ? "network" : "network.badge.shield.half.filled",
-                               accessibilityDescription: "TunnelGuard")
         button.target = self
         button.action = #selector(menuBarButtonClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        updateMenuBarIcon()
+        
+        // Observe isRulesApplied and update icon automatically
+        RouteManager.shared.$isRulesApplied
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateMenuBarIcon()
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func updateMenuBarIcon() {
+        guard let button = statusItem?.button else { return }
+        let symbolName = RouteManager.shared.isRulesApplied
+        ? "network.badge.shield.half.filled"
+        : "network"
+        button.image = NSImage(systemSymbolName: symbolName,
+                               accessibilityDescription: "TunnelGuard")
     }
 
     @objc private func menuBarButtonClicked(_ sender: NSStatusBarButton) {

@@ -251,12 +251,18 @@ struct SidebarView: View {
 
             HStack(spacing: 5) {
                 Circle()
-                    .fill(routeManager.activeRulesCount > 0 ? colors.accentGreen : colors.secondaryText)
+                    .fill(routeManager.isRulesApplied ? colors.accentGreen : colors.secondaryText)
                     .frame(width: 6, height: 6)
-                    .shadow(color: routeManager.activeRulesCount > 0 ? colors.accentGreen.opacity(0.8) : .clear, radius: 4)
-                Text(routeManager.activeRulesCount > 0 ? "\(routeManager.activeRulesCount) active" : "Idle")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(colors.secondaryText)
+                    .shadow(color: routeManager.isRulesApplied ? colors.accentGreen.opacity(0.8) : .clear, radius: 4)
+                if routeManager.isRulesApplied {
+                    Text("\(routeManager.activeRulesCount) active")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(colors.accentGreen)
+                } else {
+                    Text(routeManager.rules.count > 0 ? "\((routeManager.rules.count)) rule\((routeManager.rules.count) == 1 ? "" : "s")" : "Idle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(colors.secondaryText)
+                }
             }
             .padding(.horizontal, 12).padding(.vertical, 5)
             .background(colors.panelBg)
