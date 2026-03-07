@@ -16,11 +16,22 @@ struct TunnelGuardApp: App {
                     NSWindow.allowsAutomaticWindowTabbing = false
                     // Lock window size and disable zoom/maximize
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if let win = NSApp.windows.first(where: { !($0 is NSPanel) }) {
+                        // Close any extra windows SwiftUI may have created
+                        let contentWindows = NSApp.windows.filter { !($0 is NSPanel) }
+                        if contentWindows.count > 1 {
+                            // Keep only the first one, close extras
+                            for win in contentWindows.dropFirst() {
+                                win.close()
+                            }
+                        }
+                        if let win = contentWindows.first {
                             win.styleMask.remove(.resizable)
                             win.standardWindowButton(.zoomButton)?.isEnabled = false
                             win.setContentSize(NSSize(width: 900, height: 620))
                             win.center()
+                            // Set delegate to intercept window close
+                            win.delegate = self.appDelegate
+                            self.appDelegate.mainWindow = win
                         }
                     }
                 }
@@ -30,15 +41,16 @@ struct TunnelGuardApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
+        .handlesExternalEvents(matching: [])
     }
 }
 
 // MARK: - App Delegate
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var statusItem: NSStatusItem?
-    private var mainWindow: NSWindow?
+    var mainWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
-    
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // ── Single-instance enforcement ──
         let bundleID = Bundle.main.bundleIdentifier ?? "com.amirhpcom.tunnelguard"
@@ -74,8 +86,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Grab main window reference once SwiftUI creates it
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            self.mainWindow = NSApp.windows.first(where: { !($0 is NSPanel) })
+            if self.mainWindow == nil {
+                self.mainWindow = NSApp.windows.first(where: { !($0 is NSPanel) })
+                self.mainWindow?.delegate = self
+            }
         }
+
+        // Add keyboard shortcut handler for ⌘W
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // ⌘W — hide window instead of closing
+            if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "w" {
+                if let win = self?.mainWindow ?? NSApp.windows.first(where: { !($0 is NSPanel) && $0.isVisible }) {
+                    win.orderOut(nil)
+                    return nil // consume the event
+                }
+            }
+            return event
+        }
+    }
+
+    // MARK: - NSWindowDelegate
+
+    /// Intercept window close to hide instead of destroy — prevents SwiftUI state loss
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil) // hide the window
+        return false         // prevent actual close
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -83,8 +118,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Close any duplicate windows that SwiftUI may have created
+        let contentWindows = NSApp.windows.filter { !($0 is NSPanel) }
+        if contentWindows.count > 1 {
+            for win in contentWindows where win != mainWindow {
+                win.close()
+            }
+        }
         showMainWindow()
-        return true
+        return false  // false = we handled it, don't create a new window
     }
 
     // MARK: - Menu Bar Setup
@@ -96,7 +138,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         button.action = #selector(menuBarButtonClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         updateMenuBarIcon()
-        
+
         // Observe isRulesApplied and update icon automatically
         RouteManager.shared.$isRulesApplied
             .receive(on: DispatchQueue.main)
@@ -105,7 +147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
     }
-    
+
     private func updateMenuBarIcon() {
         guard let button = statusItem?.button else { return }
         let symbolName = RouteManager.shared.isRulesApplied
@@ -117,11 +159,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuBarButtonClicked(_ sender: NSStatusBarButton) {
         showContextMenu()
-//        if NSApp.currentEvent?.type == .rightMouseUp {
-//            showContextMenu()
-//        } else {
-//            showMainWindow()
-//        }
     }
 
     private func showContextMenu() {
@@ -130,29 +167,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         let count = RouteManager.shared.activeRulesCount
-        
+
         let openItem = NSMenuItem(title: "Open TunnelGuard", action: #selector(showMainWindow), keyEquivalent: "")
         openItem.target = self
         openItem.image = NSImage(systemSymbolName: "shield.lefthalf.filled", accessibilityDescription: "App Icon")
         menu.addItem(openItem)
-    
+
 
         let applyItem = NSMenuItem(title: RouteManager.shared.isRulesApplied ? "Stop Rules" : "Apply Rules", action: #selector(toggleFromMenu), keyEquivalent: "")
         applyItem.target = self
         applyItem.image = NSImage(systemSymbolName: RouteManager.shared.isRulesApplied ? "stop.fill" : "play.fill", accessibilityDescription: "Setting Icon")
         menu.addItem(applyItem)
 
-        
+
         menu.addItem(.separator())
-       
+
         let statusLabel = NSMenuItem( title: "\(count) active rule\(count == 1 ? "" : "s")", action: nil, keyEquivalent: "")
         statusLabel.isEnabled = false
         menu.addItem(statusLabel)
-        
+
         let header = NSMenuItem(title: "TunnelGuard v\(version) (\(build))", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
-        
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -219,4 +256,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 extension Notification.Name {
     static let dockVisibilityChanged = Notification.Name("TunnelGuardDockVisibilityChanged")
     static let settingsSaved         = Notification.Name("TunnelGuardSettingsSaved")
+    static let hostsFileChanged      = Notification.Name("TunnelGuardHostsFileChanged")
 }
