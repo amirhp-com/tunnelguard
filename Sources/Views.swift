@@ -983,6 +983,8 @@ struct SettingsView: View {
     @State private var adminGranted = PrivilegeHelper.isAdminGranted()
     @State private var adminStatusMsg: String? = nil
     @State private var hostsActive = HostsFileManager.shared.hasHostsEntries()
+    @State private var hostsEntries: [String] = HostsFileManager.shared.currentEntries()
+    @State private var vpnDNSServers: [String] = HostsFileManager.detectVPNDNS()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -1097,6 +1099,31 @@ struct SettingsView: View {
                                     .lineSpacing(3)
                             }
 
+                            // VPN DNS servers detected
+                            if !vpnDNSServers.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(colors.accentOrange)
+                                        Text("VPN DNS Detected")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(colors.accentOrange)
+                                    }
+                                    Text(vpnDNSServers.joined(separator: ", "))
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(colors.accentOrange)
+                                    Text("Your VPN is overriding system DNS with the servers above. Excluded domains with locally-hosted nameservers may fail to resolve. Enable DNS Bypass to fix this.")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(colors.secondaryText.opacity(0.7))
+                                        .lineSpacing(2)
+                                }
+                                .padding(10)
+                                .background(colors.accentOrange.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(colors.accentOrange.opacity(0.15), lineWidth: 1))
+                            }
+
                             // Status indicator
                             HStack(spacing: 6) {
                                 Circle()
@@ -1105,6 +1132,27 @@ struct SettingsView: View {
                                 Text(hostsActive ? "Hosts entries active" : "No hosts entries")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundColor(hostsActive ? colors.accentGreen : colors.secondaryText)
+                            }
+
+                            // Show current /etc/hosts entries
+                            if !hostsEntries.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Current /etc/hosts entries:")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(colors.secondaryText)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        ForEach(hostsEntries, id: \.self) { entry in
+                                            Text(entry)
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundColor(colors.accentGreen)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10).padding(.vertical, 8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(colors.inputBg)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(colors.inputBorder, lineWidth: 1))
+                                }
                             }
 
                             Text("When enabled, TunnelGuard adds entries like \"31.214.255.152 example.com\" to /etc/hosts when rules are applied, and removes them when rules are stopped. This is useful when your VPN overrides DNS settings and the excluded domain's nameservers are not reachable from the VPN's DNS server.")
@@ -1243,10 +1291,22 @@ struct SettingsView: View {
         .modifier(ToastOverlay(message: "Settings saved", icon: "checkmark.circle.fill", iconColor: colors.accentGreen, isShowing: showSavedToast, colors: colors))
         .onReceive(NotificationCenter.default.publisher(for: .settingsSaved)) { _ in
             withAnimation { showSavedToast = true }
-            hostsActive = HostsFileManager.shared.hasHostsEntries()
+            refreshHostsStatus()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { withAnimation { showSavedToast = false } }
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TunnelGuardHostsFileChanged"))) { _ in
+            refreshHostsStatus()
+        }
+        .onAppear {
+            refreshHostsStatus()
+        }
         .environmentObject(settings)
+    }
+
+    private func refreshHostsStatus() {
+        hostsActive = HostsFileManager.shared.hasHostsEntries()
+        hostsEntries = HostsFileManager.shared.currentEntries()
+        vpnDNSServers = HostsFileManager.detectVPNDNS()
     }
 }
 

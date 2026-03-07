@@ -229,20 +229,29 @@ struct PrivilegeHelper {
         return FileManager.default.fileExists(atPath: sudoersFile)
     }
 
-    /// Grant passwordless sudo for /sbin/route to the current user.
-    /// This creates a sudoers.d entry so route commands no longer need a password.
+    /// Grant passwordless sudo for /sbin/route and hosts-related commands to the current user.
+    /// This creates a sudoers.d entry so route and hosts commands no longer need a password.
     /// Returns (success, message).
     static func grantAdmin() -> (Bool, String) {
         let user = NSUserName()
-        // sudoers line: allow this user to run /sbin/route without password
-        let line = "\(user) ALL=(ALL) NOPASSWD: /sbin/route"
+        // sudoers lines: allow route, tee, cp, chmod, chown, dscacheutil, killall without password
+        let lines = [
+            "\(user) ALL=(ALL) NOPASSWD: /sbin/route",
+            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/hosts",
+            "\(user) ALL=(ALL) NOPASSWD: /bin/cp /tmp/tunnelguard_hosts_* /etc/hosts",
+            "\(user) ALL=(ALL) NOPASSWD: /bin/chmod 644 /etc/hosts",
+            "\(user) ALL=(ALL) NOPASSWD: /usr/sbin/chown root\\:wheel /etc/hosts",
+            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/dscacheutil -flushcache",
+            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/killall -HUP mDNSResponder"
+        ]
+        let content = lines.joined(separator: "\n")
         // We need admin to write to /etc/sudoers.d/
-        let cmd = "echo '\(line)' > \(sudoersFile) && chmod 0440 \(sudoersFile) && chown root:wheel \(sudoersFile)"
+        let cmd = "printf '%s\\n' '\(content)' > \(sudoersFile) && chmod 0440 \(sudoersFile) && chown root:wheel \(sudoersFile)"
         let result = runAsAdmin(cmd)
         if result.contains("Error:") {
             return (false, result)
         }
-        return (true, "Admin access granted for route commands")
+        return (true, "Admin access granted for route and hosts commands")
     }
 
     /// Revoke the passwordless sudo entry.
@@ -334,31 +343,33 @@ class HostsFileManager {
 
     /// Write content to /etc/hosts using elevated privileges.
     private func writeHosts(_ content: String) -> (Bool, String) {
-        // Escape single quotes in content for shell
-        let escaped = content.replacingOccurrences(of: "'", with: "'\\''")
         let tmpFile = "/tmp/tunnelguard_hosts_\(ProcessInfo.processInfo.processIdentifier)"
 
-        // Write to temp file first, then move with sudo
+        // Write to temp file first (no escaping needed — direct file write)
         do {
-            try escaped.write(toFile: tmpFile, atomically: true, encoding: .utf8)
+            try content.write(toFile: tmpFile, atomically: true, encoding: .utf8)
         } catch {
             return (false, "Error: Could not write temp file — \(error.localizedDescription)")
         }
 
-        let cmd = "cp \(tmpFile) \(hostsPath) && chmod 644 \(hostsPath) && chown root:wheel \(hostsPath) && rm -f \(tmpFile)"
-
-        let result: String
         if PrivilegeHelper.isAdminGranted() {
-            result = shell("sudo \(cmd)")
+            // Use individual sudo commands that match sudoers entries
+            let result = shell("sudo /bin/cp \(tmpFile) \(hostsPath) && sudo /bin/chmod 644 \(hostsPath) && sudo /usr/sbin/chown root:wheel \(hostsPath) && rm -f \(tmpFile)")
+            if result.contains("error") || result.contains("not permitted") || result.contains("denied") {
+                try? FileManager.default.removeItem(atPath: tmpFile)
+                return (false, "Error: \(result)")
+            }
         } else {
-            result = PrivilegeHelper.runAsAdmin(cmd)
+            let cmd = "cp \(tmpFile) \(hostsPath) && chmod 644 \(hostsPath) && chown root:wheel \(hostsPath) && rm -f \(tmpFile)"
+            let result = PrivilegeHelper.runAsAdmin(cmd)
+            if result.contains("Error:") {
+                try? FileManager.default.removeItem(atPath: tmpFile)
+                return (false, result)
+            }
         }
 
-        if result.contains("Error:") {
-            // Clean up temp file
-            try? FileManager.default.removeItem(atPath: tmpFile)
-            return (false, result)
-        }
+        // Clean up temp file (in case it still exists)
+        try? FileManager.default.removeItem(atPath: tmpFile)
 
         // Flush macOS DNS cache so changes take effect immediately
         flushDNSCache()
@@ -379,6 +390,47 @@ class HostsFileManager {
     func hasHostsEntries() -> Bool {
         guard let content = try? String(contentsOfFile: hostsPath, encoding: .utf8) else { return false }
         return content.contains(beginMarker)
+    }
+
+    /// Read the current TunnelGuard entries from /etc/hosts for display.
+    func currentEntries() -> [String] {
+        guard let content = try? String(contentsOfFile: hostsPath, encoding: .utf8) else { return [] }
+        var entries: [String] = []
+        var inBlock = false
+        for line in content.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("# TunnelGuard BEGIN") {
+                inBlock = true
+                continue
+            }
+            if trimmed.hasPrefix("# TunnelGuard END") {
+                inBlock = false
+                continue
+            }
+            if inBlock && !trimmed.isEmpty {
+                entries.append(trimmed)
+            }
+        }
+        return entries
+    }
+
+    /// Detect VPN DNS servers from scutil --dns output.
+    static func detectVPNDNS() -> [String] {
+        let raw = shell("scutil --dns 2>/dev/null")
+        var servers: [String] = []
+        for line in raw.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("nameserver[") || trimmed.hasPrefix("nameserver :") {
+                // Extract IP from "nameserver[0] : 8.8.8.8"
+                if let colonIdx = trimmed.range(of: ":") {
+                    let ip = trimmed[colonIdx.upperBound...].trimmingCharacters(in: .whitespaces)
+                    if !ip.isEmpty && !servers.contains(ip) {
+                        servers.append(ip)
+                    }
+                }
+            }
+        }
+        return servers
     }
 }
 
@@ -679,6 +731,7 @@ class RouteManager: ObservableObject {
         } else {
             log("⚠️ Failed to write /etc/hosts: \(msg)")
         }
+        NotificationCenter.default.post(name: Notification.Name("TunnelGuardHostsFileChanged"), object: nil)
     }
 
     /// Remove TunnelGuard entries from /etc/hosts.
@@ -690,6 +743,7 @@ class RouteManager: ObservableObject {
         } else {
             log("⚠️ Failed to clean /etc/hosts: \(msg)")
         }
+        NotificationCenter.default.post(name: Notification.Name("TunnelGuardHostsFileChanged"), object: nil)
     }
 
     /// Sync /etc/hosts with current rules (used when toggling/editing individual rules).
@@ -700,6 +754,7 @@ class RouteManager: ObservableObject {
         } else {
             log("⚠️ Failed to update /etc/hosts: \(msg)")
         }
+        NotificationCenter.default.post(name: Notification.Name("TunnelGuardHostsFileChanged"), object: nil)
     }
 
     /// Resolve IPs using the configured DNS server to avoid sandbox/bind errors.
