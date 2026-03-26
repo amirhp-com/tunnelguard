@@ -1084,6 +1084,11 @@ struct SettingsView: View {
                                 }
                             } else {
                                 GlassTextField(placeholder: "e.g. 192.168.1.1", text: $settings.manualGatewayIP, colors: colors)
+                                if !settings.manualGatewayIP.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSafeIPv4(settings.manualGatewayIP.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                                    Text("Invalid IP address format")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(colors.accentRed)
+                                }
                             }
                         }
                     }
@@ -1109,6 +1114,11 @@ struct SettingsView: View {
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(colors.inputBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
+                            }
+                            if !settings.dnsServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSafeIPv4(settings.dnsServer.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                                Text("Invalid IP address format")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(colors.accentRed)
                             }
                             Text("Leave empty to use system DNS. Or use your gateway IP for local resolution.")
                                 .font(.system(size: 10))
