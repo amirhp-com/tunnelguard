@@ -498,6 +498,34 @@ class RouteManager: ObservableObject {
         updateCount()
     }
 
+    /// Export rules as JSON data for saving to file.
+    func exportRules() -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try? encoder.encode(rules)
+    }
+
+    /// Import rules from JSON data. Skips duplicates. Returns count of imported rules.
+    func importRules(from data: Data) -> Int {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let imported = try? decoder.decode([RouteRule].self, from: data) else { return 0 }
+        var count = 0
+        for var rule in imported {
+            let domain = RouteManager.cleanDomain(rule.domain).lowercased()
+            if rules.contains(where: { $0.domain.lowercased() == domain }) { continue }
+            rule.id = UUID() // Assign new ID to avoid collisions
+            rules.append(rule)
+            count += 1
+        }
+        if count > 0 {
+            saveRules()
+            log("Imported \(count) rule(s)")
+        }
+        return count
+    }
+
     /// Persist applied state so we can restore it after force-quit
     private func saveAppliedState() {
         UserDefaults.standard.set(isRulesApplied, forKey: appliedStateKey)

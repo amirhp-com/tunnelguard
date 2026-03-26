@@ -463,6 +463,9 @@ struct RulesView: View {
         return result
     }
 
+    @State private var showImportError = false
+    @State private var importMessage = ""
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -475,6 +478,50 @@ struct RulesView: View {
                         .foregroundColor(colors.secondaryText)
                 }
                 Spacer()
+
+                // Export button
+                Button {
+                    guard let data = routeManager.exportRules() else { return }
+                    let panel = NSSavePanel()
+                    panel.nameFieldStringValue = "tunnelguard-rules.json"
+                    panel.allowedContentTypes = [.json]
+                    if panel.runModal() == .OK, let url = panel.url {
+                        try? data.write(to: url)
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 12))
+                        .foregroundColor(colors.secondaryText)
+                        .padding(7)
+                        .background(colors.inputBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(colors.inputBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .help("Export rules as JSON")
+
+                // Import button
+                Button {
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [.json]
+                    panel.allowsMultipleSelection = false
+                    if panel.runModal() == .OK, let url = panel.url,
+                       let data = try? Data(contentsOf: url) {
+                        let count = routeManager.importRules(from: data)
+                        if count == 0 {
+                            importMessage = "No new rules to import (all duplicates or invalid file)."
+                            showImportError = true
+                        }
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.down").font(.system(size: 12))
+                        .foregroundColor(colors.secondaryText)
+                        .padding(7)
+                        .background(colors.inputBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(colors.inputBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .help("Import rules from JSON")
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundColor(colors.secondaryText).font(.system(size: 12))
                     TextField("Search domains...", text: $searchText)
@@ -589,6 +636,11 @@ struct RulesView: View {
             if let r = routeManager.ruleToDelete {
                 Text("Are you sure you want to delete the rule for \"\(r.domain)\"? This will also remove its routes.")
             }
+        }
+        .alert("Import", isPresented: $showImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importMessage)
         }
     }
 }
