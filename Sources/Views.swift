@@ -433,12 +433,34 @@ struct RulesView: View {
     let colors: TGColors
     @State private var searchText = ""
 
+    enum StatusFilter: String, CaseIterable { case all = "All", active = "Active", paused = "Paused" }
+    @State private var statusFilter: StatusFilter = .all
+
+    enum SortOption: String, CaseIterable { case domain = "Domain", date = "Date", ips = "IPs" }
+    @State private var sortOption: SortOption = .domain
+
     var filteredRules: [RouteRule] {
-        searchText.isEmpty ? routeManager.rules :
-        routeManager.rules.filter {
-            $0.domain.localizedCaseInsensitiveContains(searchText) ||
-            $0.allIPs.joined().contains(searchText)
+        var result = routeManager.rules
+        // Status filter
+        switch statusFilter {
+        case .active: result = result.filter { $0.isEnabled }
+        case .paused: result = result.filter { !$0.isEnabled }
+        case .all: break
         }
+        // Search filter
+        if !searchText.isEmpty {
+            result = result.filter {
+                $0.domain.localizedCaseInsensitiveContains(searchText) ||
+                $0.allIPs.joined().contains(searchText)
+            }
+        }
+        // Sort
+        switch sortOption {
+        case .domain: result.sort { $0.domain.lowercased() < $1.domain.lowercased() }
+        case .date: result.sort { ($0.lastResolved ?? .distantPast) > ($1.lastResolved ?? .distantPast) }
+        case .ips: result.sort { $0.allIPs.count > $1.allIPs.count }
+        }
+        return result
     }
 
     var body: some View {
@@ -466,7 +488,44 @@ struct RulesView: View {
                 .overlay(RoundedRectangle(cornerRadius: 9).stroke(colors.inputBorder, lineWidth: 1))
                 .frame(width: 200)
             }
-            .padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 18)
+            .padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 8)
+
+            // Filter & Sort bar
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    ForEach(StatusFilter.allCases, id: \.self) { filter in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { statusFilter = filter }
+                        } label: {
+                            Text(filter.rawValue)
+                                .font(.system(size: 11, weight: statusFilter == filter ? .semibold : .regular))
+                                .foregroundColor(statusFilter == filter ? colors.accentBlue : colors.secondaryText)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(statusFilter == filter ? colors.selectedNavBg : Color.clear)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Spacer()
+                HStack(spacing: 4) {
+                    Text("Sort:").font(.system(size: 11)).foregroundColor(colors.secondaryText)
+                    ForEach(SortOption.allCases, id: \.self) { opt in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { sortOption = opt }
+                        } label: {
+                            Text(opt.rawValue)
+                                .font(.system(size: 11, weight: sortOption == opt ? .semibold : .regular))
+                                .foregroundColor(sortOption == opt ? colors.accentBlue : colors.secondaryText)
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(sortOption == opt ? colors.selectedNavBg : Color.clear)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 24).padding(.bottom, 10)
 
             if let err = routeManager.lastError {
                 HStack(spacing: 8) {
