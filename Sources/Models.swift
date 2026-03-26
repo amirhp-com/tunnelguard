@@ -1093,6 +1093,13 @@ class RouteManager: ObservableObject {
         }
     }
 
+    private static let logFileURL: URL = {
+        let logsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/TunnelGuard")
+        try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
+        return logsDir.appendingPathComponent("tunnelguard.log")
+    }()
+
     func log(_ message: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let entry = "[\(timestamp)] \(message)"
@@ -1103,6 +1110,7 @@ class RouteManager: ObservableObject {
             }
         }
         print(entry)
+        Self.appendToLogFile(entry)
     }
 
     /// Log a command (prefixed with CMD: for purple coloring in LogsView)
@@ -1116,6 +1124,26 @@ class RouteManager: ObservableObject {
             }
         }
         print(entry)
+        Self.appendToLogFile(entry)
+    }
+
+    /// Append a log entry to the persistent log file with rotation.
+    private static func appendToLogFile(_ entry: String) {
+        let line = entry + "\n"
+        if let handle = try? FileHandle(forWritingTo: logFileURL) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8) ?? Data())
+            handle.closeFile()
+        } else {
+            try? line.write(to: logFileURL, atomically: true, encoding: .utf8)
+        }
+        // Rotate if log exceeds 1MB
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
+           let size = attrs[.size] as? UInt64, size > 1_000_000 {
+            let backup = logFileURL.deletingLastPathComponent().appendingPathComponent("tunnelguard.log.old")
+            try? FileManager.default.removeItem(at: backup)
+            try? FileManager.default.moveItem(at: logFileURL, to: backup)
+        }
     }
 }
 
