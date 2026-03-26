@@ -323,9 +323,13 @@ struct SidebarView: View {
                     }
                 } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: routeManager.isRulesApplied ? "stop.fill" : "play.fill")
-                            .font(.system(size: 11))
-                        Text(routeManager.isRulesApplied ? "Stop Rules" : "Apply Rules")
+                        if routeManager.isApplying {
+                            ProgressView().scaleEffect(0.6).tint(.white).frame(width: 14, height: 14)
+                        } else {
+                            Image(systemName: routeManager.isRulesApplied ? "stop.fill" : "play.fill")
+                                .font(.system(size: 11))
+                        }
+                        Text(routeManager.isApplying ? "Applying..." : (routeManager.isRulesApplied ? "Stop Rules" : "Apply Rules"))
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundColor(.white)
@@ -347,6 +351,7 @@ struct SidebarView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(routeManager.isApplying)
                 .animation(.easeInOut(duration: 0.25), value: routeManager.isRulesApplied)
             }
             .padding(.horizontal, 10)
