@@ -1,6 +1,22 @@
+# Build artifacts
 .build/
-*.xcuserdata/
-.swiftpm/
 DerivedData/
-*.resolved
+dist/
+
+# Xcode
+*.xcuserdata/
 *.xcodeproj/project.xcworkspace/
+xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+*.resolved
+Package.resolved
+
+# macOS
+.DS_Store
+*.dSYM
+*.dSYM.zip
+
+# Reports (generated)
+TunnelGuard-Report.html

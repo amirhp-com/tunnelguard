@@ -1,27 +1,28 @@
 <img src="screenshot.png" style="border-radius: 12px; width: 100%; max-width: 800px;">
 
-# 🛡️ TunnelGuard
+# TunnelGuard
 
 **macOS VPN Split-Tunnel Manager** — Exclude specific domains from your VPN tunnel with a clean, native macOS interface.
 
 [![Download Latest](https://img.shields.io/badge/Download-Latest%20Release-blue?logo=apple)](https://github.com/amirhp-com/tunnelguard/releases/latest)
-[![macOS](https://img.shields.io/badge/version-1.9.0-purple)](https://github.com/amirhp-com/tunnelguard)
+[![macOS](https://img.shields.io/badge/version-2.6.0-purple)](https://github.com/amirhp-com/tunnelguard)
 [![macOS](https://img.shields.io/badge/macOS-13.0%2B-green)](https://github.com/amirhp-com/tunnelguard)
-[![License](https://img.shields.io/badge/License-WTFPL-orange)](https://github.com/amirhp-com/tunnelguard/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-GPLv3-orange)](https://github.com/amirhp-com/tunnelguard/blob/main/LICENSE)
+[![Build](https://github.com/amirhp-com/tunnelguard/actions/workflows/build.yml/badge.svg)](https://github.com/amirhp-com/tunnelguard/actions/workflows/build.yml)
 
-> **Version 2.0.0** · Released 2026-03-07 · 1404-12-16
+> **Version 2.6.0** (Build 145) &middot; Released 2026-03-26
 >
-> Developer: [Amirhossein Hosseinpour (AmirhpCom)](https://amirhp.com/landing) · [GitHub](https://github.com/amirhp-com)
+> Developer: [Amirhossein Hosseinpour (AmirhpCom)](https://amirhp.com/landing) &middot; [GitHub](https://github.com/amirhp-com)
 >
 > Inspired by: [a post on dev.to by @vavilov2212](https://dev.to/vavilov2212/routing-only-specific-subnets-through-vpn-split-tunneling-on-macos-2aig)
 
 ---
 
-## 📥 Download & Install
+## Download & Install
 
 ### Step 1: Download
 
-👉 **[Download TunnelGuard (DMG)](https://github.com/amirhp-com/tunnelguard/releases/latest)**
+**[Download TunnelGuard (DMG)](https://github.com/amirhp-com/tunnelguard/releases/latest)**
 
 Or go to [Releases](https://github.com/amirhp-com/tunnelguard/releases) to see all versions.
 
@@ -31,10 +32,10 @@ Or go to [Releases](https://github.com/amirhp-com/tunnelguard/releases) to see a
 2. **Drag** the TunnelGuard icon into the Applications folder shortcut shown in the window
 3. **Eject** the DMG from Finder sidebar (optional)
 4. **Open** TunnelGuard from your Applications folder
-5. **First launch:** macOS will warn it's from an unidentified developer — right-click the app → **Open** → click **Open** again to bypass Gatekeeper
-6. **Grant admin access:** Go to Settings → Admin Access → Grant Access for passwordless route commands (recommended)
+5. **First launch:** macOS will warn it's from an unidentified developer — right-click the app > **Open** > click **Open** again to bypass Gatekeeper
+6. **Grant admin access:** Go to Settings > Admin Access > Grant Access for passwordless route commands (recommended)
 
-> **Tip:** If macOS blocks the app entirely, go to **System Settings → Privacy & Security** and click **Open Anyway** next to the TunnelGuard warning.
+> **Tip:** If macOS blocks the app entirely, go to **System Settings > Privacy & Security** and click **Open Anyway** next to the TunnelGuard warning.
 
 ---
 
@@ -48,23 +49,39 @@ This is commonly called **split tunneling**. macOS doesn't expose this natively 
 
 ## Features
 
-- **Domain-based exclusions** — Enter a domain name and TunnelGuard resolves its IPs and adds bypass routes automatically
-- **Auto IP Resolution** — Uses `dig` / `nslookup` to discover all IPs for a given domain (supports multiple IPs)
+### Core
+- **Domain-based exclusions** — Enter a domain and TunnelGuard resolves its IPs and adds bypass routes
+- **Auto IP Resolution** — Uses `dig` / `nslookup` to discover all IPs (supports multiple IPs per domain)
 - **Manual IP entry** — Add custom IPs alongside auto-resolved ones
-- **Gateway Auto-detection** — Detects your local default gateway with IP validation, or lets you specify one manually
-- **Apply/Stop toggle** — One-click to apply all rules, one-click to stop them
+- **Gateway auto-detection** — Detects your local default gateway with IP validation, or manual override
+- **Apply/Stop toggle** — One-click to apply all rules, one-click to stop
+- **DNS Bypass** — Write resolved IPs to `/etc/hosts` to bypass VPN DNS completely
+- **Network change detection** — Auto re-detects gateway and re-applies rules on network changes
+
+### Management
 - **Toggle rules on/off** — Pause a rule without deleting it
-- **Edit rules inline** — Change domain, notes, and manual IPs after creation
-- **Refresh IPs** — Re-resolve a domain's IPs at any time with toast notifications
+- **Edit rules inline** — Change domain, notes, manual IPs with auto re-resolution
+- **Refresh IPs** — Re-resolve a domain's IPs at any time
+- **Duplicate rules** — Clone existing rules with one click
+- **Import / Export** — Save and load rules as JSON for backup or sharing
+- **Search, filter & sort** — Find rules by domain/IP, filter by status, sort by name/date/IPs
 - **Delete confirmation** — No accidental deletions
-- **Admin access grant** — Skip password prompts with a sudoers entry for `/sbin/route`
-- **Activity log** — Full log of all route operations with color-coded output (commands in purple)
-- **Toast notifications** — Visual feedback for apply, stop, refresh, and errors
-- **Launch at startup** — Runs as a LaunchAgent and applies your rules at login
-- **Menu bar integration** — Lives in your menu bar, out of the way
-- **Dark & Light theme** — Follows macOS appearance with proper visibility in both modes
+
+### Security
+- **Input sanitization** — All shell inputs validated (IPs, domains, DNS server, paths)
+- **Hardened Runtime** — macOS Hardened Runtime enabled
+- **Restricted sudoers** — Admin access limited to specific commands and paths only
+- **Secure temp files** — UUID-based filenames prevent TOCTOU attacks
+- **Hosts file backup** — Automatic backup before every `/etc/hosts` modification
+
+### Interface
+- **Keyboard shortcuts** — `Cmd+N` (new rule), `Cmd+Shift+R` (apply/stop), `Cmd+1/2/3` (tabs)
+- **Toast notifications** — Visual feedback for all operations
+- **Activity log** — Real-time log with color-coded output + persistent log file
+- **Menu bar integration** — Lives in your menu bar with dynamic icon
+- **Dark & Light theme** — Follows macOS appearance
+- **Launch at startup** — Runs as a LaunchAgent with auto-apply
 - **Single instance** — Only one copy runs at a time
-- **Liquid Glass UI** — Follows macOS design language with translucent aesthetics
 
 ---
 
@@ -74,7 +91,7 @@ TunnelGuard uses macOS's built-in `route` command to add explicit routing entrie
 
 ```bash
 # When you add a domain:
-# 1. Resolve domain → IPs
+# 1. Resolve domain IPs
 dig +short example.com A
 
 # 2. Add a route via your local gateway (bypassing VPN)
@@ -103,36 +120,39 @@ This tells your Mac: "For traffic to this IP, use the local gateway — not the 
 ### Adding Your First Rule
 
 1. Launch TunnelGuard
-2. Click **"Add Domain"** in the sidebar
-3. Enter the domain (e.g., `office.company.com`)
+2. Click **"Add Domain"** in the sidebar (or press `Cmd+N`)
+3. Enter the domain (e.g., `office.company.com`) — URLs are auto-cleaned
 4. Optionally add manual IPs and a note
 5. Click **"Add Rule"** — TunnelGuard resolves the domain's IPs
-6. Click **"Apply Rules"** at the bottom of the sidebar to activate all enabled rules
+6. Click **"Apply Rules"** (or press `Cmd+Shift+R`) to activate all enabled rules
 
 ### Gateway Configuration
 
 By default, TunnelGuard detects your local gateway automatically. If the detected value isn't a valid IP (e.g., `link#28`), you'll see a warning with options to copy the value or switch to manual mode.
 
-Go to **Settings → VPN Gateway → Manual** to enter your gateway IP manually (usually `192.168.x.1`).
+Go to **Settings > VPN Gateway > Manual** to enter your gateway IP manually (usually `192.168.x.1`).
+
+When your network changes (VPN connect/disconnect, Wi-Fi switch), the gateway is automatically re-detected and routes are re-applied.
 
 ### DNS Configuration
 
-By default, TunnelGuard uses your system's DNS for resolving domains. You can specify a custom DNS server in **Settings → DNS Resolution**, or click **"Use Gateway"** to use your gateway IP as the DNS server.
+By default, TunnelGuard uses `8.8.8.8` (Google DNS) for resolving domains. You can specify a custom DNS server in **Settings > DNS Resolution**, or click **"Use Gateway"** to use your gateway IP as the DNS server.
 
-### Toggling & Editing Rules
+### Import & Export
 
-Each rule has an on/off toggle and action buttons for editing (pencil icon), refreshing IPs (refresh icon), and deleting (trash icon with confirmation).
+- Click the **export icon** (up arrow) in the Rules header to save all rules as a JSON file
+- Click the **import icon** (down arrow) to load rules from a JSON file
+- Duplicate domains are automatically skipped during import
 
-### Admin Access (Recommended)
+### Keyboard Shortcuts
 
-Go to **Settings → Admin Access → Grant Access** to create a sudoers entry. This lets TunnelGuard run route commands without prompting for your password each time. You can revoke this at any time from the same section.
-
-### Startup Behavior
-
-| Setting | Description |
-|---------|-------------|
-| Launch at startup | Installs a LaunchAgent to start TunnelGuard at login |
-| Apply rules on launch | Automatically runs all enabled rules when the app starts |
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+N` | Add new rule |
+| `Cmd+Shift+R` | Apply / Stop rules |
+| `Cmd+1` | Switch to Rules tab |
+| `Cmd+2` | Switch to Logs tab |
+| `Cmd+3` | Switch to Settings tab |
 
 ---
 
@@ -142,12 +162,13 @@ Go to **Settings → Admin Access → Grant Access** to create a sudoers entry. 
 |---------|---------|-------------|
 | Gateway Mode | Automatic | Auto-detect or manually specify local gateway |
 | Manual Gateway IP | — | Used when mode is Manual |
-| DNS Server | (empty / system default) | DNS server for resolving domain IPs |
+| DNS Server | 8.8.8.8 | DNS server for resolving domain IPs |
+| Write to /etc/hosts | Off | DNS bypass via local hosts file |
 | Theme | System | Dark, Light, or follow system appearance |
 | App Presence | Both | Menu Bar Only, Dock Only, or Both |
 | Launch at startup | Off | Register as a system LaunchAgent |
 | Apply rules on launch | On | Run active rules when app opens |
-| Admin Access | Not granted | Passwordless sudo for /sbin/route |
+| Admin Access | Not granted | Passwordless sudo for route commands |
 
 ---
 
@@ -159,71 +180,53 @@ Go to **Settings → Admin Access → Grant Access** to create a sudoers entry. 
 xcode-select --install   # Install Command Line Tools
 ```
 
-### Clone & Open in Xcode
+### Clone & Build
 
 ```bash
 git clone https://github.com/amirhp-com/tunnelguard.git
 cd tunnelguard/source
+make build
+```
+
+### Create DMG Installer
+
+```bash
+make dmg
+# Output: dist/TunnelGuard.dmg
+```
+
+### Open in Xcode
+
+```bash
 open TunnelGuard.xcodeproj
 ```
 
-Build with **Cmd+B** or **Product → Build**.
-
-### Build Release & Create DMG
-
-```bash
-cd source
-xcodebuild -project TunnelGuard.xcodeproj -scheme TunnelGuard -configuration Release build
-
-APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/TunnelGuard-*/Build/Products/Release -name "TunnelGuard.app" -maxdepth 1 | head -1)
-
-mkdir -p /tmp/dmg-build
-cp -R "$APP_PATH" /tmp/dmg-build/
-ln -s /Applications /tmp/dmg-build/Applications
-hdiutil create -volname "TunnelGuard" -srcfolder /tmp/dmg-build -ov -format UDZO ~/Desktop/TunnelGuard.dmg
-rm -rf /tmp/dmg-build
-```
+Build with **Cmd+B** or **Product > Build**.
 
 ---
 
-## Customizing Your Build
+## Log Files
 
-TunnelGuard is designed to be forkable and customizable:
-
-### Change App Identity
-
-In `Info.plist`:
-```xml
-<key>CFBundleIdentifier</key>
-<string>com.yourname.tunnelguard</string>
-```
-
-### Modify Route Commands
-
-In `Sources/Models.swift`, `RouteManager.applyRoutes()`:
-```swift
-// For subnet routing:
-let result = shell("sudo route -n add -net \(subnet)/24 \(gw) 2>&1")
-```
+TunnelGuard writes logs to:
+- **In-app:** Activity Log tab (200 most recent entries)
+- **Persistent:** `~/Library/Logs/TunnelGuard/tunnelguard.log` (auto-rotated at 1MB)
 
 ---
 
 ## Contributing
 
-Contributions are welcome:
-
-1. **Fork** the repository
-2. **Create a branch:** `git checkout -b feature/my-improvement`
-3. **Make your changes** and test on macOS
-4. **Open a Pull Request** with a clear description
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Areas That Could Use Help
 
-- **Subnet/CIDR support** — Add routes for entire subnets
-- **Multiple gateway profiles** — Switch between different VPN setups
-- **Automatic IP refresh** — Periodically re-resolve domains on a schedule
-- **Import/Export** — Export rules as JSON for sharing or backup
-- **Homebrew cask** — Package for easy installation
+- Subnet/CIDR support
+- IPv6 support
+- Multiple gateway profiles
+- Automatic IP refresh on schedule
+- Homebrew cask packaging
+- Localization
+- Accessibility (VoiceOver)
+- Unit tests
 
 ---
 
@@ -239,71 +242,22 @@ The developer assumes **no responsibility** for network disruptions, security in
 
 ## Changelog
 
-### v2.0.0 — 2026-03-07
-- **DNS Bypass (`/etc/hosts`)** — New setting to write resolved IPs directly to `/etc/hosts`, bypassing VPN DNS completely. Solves the issue where VPN overrides DNS settings and excluded domains with locally-hosted nameservers fail to resolve. Entries are managed inside a `## TunnelGuard - Start ##` / `## TunnelGuard - End ##` block, matching the format used by Local and WordPress Studio.
-- **VPN DNS detection** — Settings now shows which DNS servers your VPN has pushed (parsed from `scutil --dns`), with a warning when VPN DNS override is detected
-- **Current hosts entries display** — DNS Bypass section shows the actual `/etc/hosts` entries written by TunnelGuard in real-time
-- **DNS cache flush** — Automatically runs `dscacheutil -flushcache` and `killall -HUP mDNSResponder` after every hosts file change so changes take effect immediately
-- **Route state persistence** — Applied/stopped state is saved to UserDefaults and restored on next launch
-- **Existing route detection** — On startup, checks `netstat -nr` for routes from a previous session. If routes are still active after a force-quit, the UI reflects the correct state without re-applying
-- **Startup diagnostics log** — Logs detailed startup info: app version, rule count, gateway IP, DNS server, VPN DNS servers, hosts file status, admin access status, and launch settings
-- **Non-blocking route operations** — Apply and stop operations now run shell commands on a background thread, preventing UI and menu bar freezes during route changes
-- **Expanded admin access** — Sudoers entry now covers `/bin/cp`, `/bin/chmod`, `/usr/sbin/chown`, `/usr/bin/dscacheutil`, and `/usr/bin/killall` in addition to `/sbin/route`, enabling passwordless `/etc/hosts` management. Requires re-granting admin access after update.
-- **Delete confirmation stays on Rules tab** — Moved delete confirmation alert from ContentView into RulesView to prevent tab switching when deleting a rule
-- **Single window enforcement** — Clicking the dock icon now shows the existing window instead of creating a duplicate
-
-### v1.9.5 — 2026-03-07
-- **Menu-bar icon** — changes automatically between shield and network icon when toggling rules on/off
-- **Sidebar status badge** — rules count and indicator color update dynamically (green when active, gray when idle)
-- **Menu-bar context menu** — items and icons reflect current active/inactive state
-
-### v1.9.0 — 2026-03-06
-- Admin access grant/revoke from Settings (sudoers entry for `/sbin/route`)
-- Smart DNS resolution — leave DNS field empty for system default, or use gateway IP
-- Gateway IP validation — detects invalid results like `link#28` with copy & manual entry options
-- "Use Gateway" button in DNS settings
-- Apply/Stop toggle — green when active, blue when idle
-- Toast notifications for apply, stop, refresh, and errors
-- Edit rules inline — change domain, notes, manual IPs
-- Manual IP entry — add custom IPs alongside resolved ones (shown with "M" badge)
-- Multiple IP support — all resolved IPs are captured and routed
-- Delete confirmation dialog
-- Light mode UI fixes for toggles and segmented pickers
-- Single instance enforcement
-- Full command logging in purple with bold font
-- Fixed `dig` bind error by using explicit DNS server and nslookup fallback
-- Fixed osascript admin prompt blocked by App Sandbox (sandbox removed)
-- Add Rule button no longer resizes when loading spinner appears
-- Version and build number read from Xcode project settings via `$(MARKETING_VERSION)` and `$(CURRENT_PROJECT_VERSION)`
-
-### v1.0.0 — 2026-03-06
-
-- Initial release
-- Domain-based VPN split-tunnel routing
-- Auto IP resolution via `dig`
-- Gateway auto-detection
-- Rule toggle, refresh, delete
-- Activity log with color-coded output
-- Menu bar integration
-- Launch at startup with auto-apply
-- Dark theme with liquid glass UI
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ---
 
 ## License
 
 ```
-Copyleft (c) 2026 Amirhossein Hosseinpour (Amirhp.Com)
+Copyright (C) 2026 Amirhossein Hosseinpour (Amirhp.Com)
 
-This work is free. You can redistribute it and/or modify it under the
-terms of the Do What The Fuck You Want To Public License, Version 2,
-as published by Sam Hocevar.
-
-            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
-
-  0. You just DO WHAT THE FUCK YOU WANT TO.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 ```
+
+See [LICENSE](LICENSE) for the full text.
 
 ---
 
