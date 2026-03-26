@@ -954,6 +954,7 @@ struct LogsView: View {
     @EnvironmentObject var routeManager: RouteManager
     let colors: TGColors
     @State private var showCopiedToast = false
+    @State private var showClearConfirm = false
 
     private var logText: String { routeManager.lastActionLog.joined(separator: "\n") }
 
@@ -984,7 +985,7 @@ struct LogsView: View {
                 }
                 .buttonStyle(.plain).animation(.easeInOut(duration: 0.2), value: showCopiedToast)
 
-                Button { RouteManager.shared.lastActionLog.removeAll() } label: {
+                Button { showClearConfirm = true } label: {
                     Text("Clear").font(.system(size: 12, weight: .medium))
                         .foregroundColor(colors.secondaryText)
                         .padding(.horizontal, 12).padding(.vertical, 6)
@@ -1003,6 +1004,12 @@ struct LogsView: View {
                 .padding(.horizontal, 24).padding(.bottom, 24)
         }
         .modifier(ToastOverlay(message: "Copied to clipboard", icon: "doc.on.doc.fill", iconColor: colors.accentGreen, isShowing: showCopiedToast, colors: colors))
+        .alert("Clear Logs", isPresented: $showClearConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) { RouteManager.shared.lastActionLog.removeAll() }
+        } message: {
+            Text("Are you sure you want to clear all log entries?")
+        }
     }
 }
 
@@ -1055,6 +1062,7 @@ struct SettingsView: View {
     @State private var showSavedToast = false
     @State private var adminGranted = PrivilegeHelper.isAdminGranted()
     @State private var adminStatusMsg: String? = nil
+    @State private var showAdminConfirm = false
     @State private var hostsActive = HostsFileManager.shared.hasHostsEntries()
     @State private var hostsEntries: [String] = HostsFileManager.shared.currentEntries()
     @State private var vpnDNSServers: [String] = HostsFileManager.detectVPNDNS()
@@ -1348,17 +1356,7 @@ struct SettingsView: View {
                                 }
                                 Spacer()
                                 Button {
-                                    if adminGranted {
-                                        let (ok, msg) = PrivilegeHelper.revokeAdmin()
-                                        adminGranted = !ok
-                                        adminStatusMsg = msg
-                                    } else {
-                                        let (ok, msg) = PrivilegeHelper.grantAdmin()
-                                        adminGranted = ok
-                                        adminStatusMsg = msg
-                                    }
-                                    // Clear status after a few seconds
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { adminStatusMsg = nil }
+                                    showAdminConfirm = true
                                 } label: {
                                     HStack(spacing: 5) {
                                         Image(systemName: adminGranted ? "lock.open.fill" : "lock.fill")
@@ -1421,6 +1419,25 @@ struct SettingsView: View {
             refreshHostsStatus()
         }
         .environmentObject(settings)
+        .alert(adminGranted ? "Revoke Admin Access" : "Grant Admin Access", isPresented: $showAdminConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button(adminGranted ? "Revoke" : "Grant", role: adminGranted ? .destructive : nil) {
+                if adminGranted {
+                    let (ok, msg) = PrivilegeHelper.revokeAdmin()
+                    adminGranted = !ok
+                    adminStatusMsg = msg
+                } else {
+                    let (ok, msg) = PrivilegeHelper.grantAdmin()
+                    adminGranted = ok
+                    adminStatusMsg = msg
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { adminStatusMsg = nil }
+            }
+        } message: {
+            Text(adminGranted
+                 ? "This will remove the sudoers entry. You'll need to enter your password each time routes are applied."
+                 : "This will create a sudoers entry allowing TunnelGuard to run route commands without a password prompt.")
+        }
     }
 
     private func refreshHostsStatus() {
