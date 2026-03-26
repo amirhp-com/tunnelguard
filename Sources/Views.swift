@@ -772,6 +772,8 @@ struct EditRuleSheet: View {
     @State private var notes: String = ""
     @State private var manualIPsText: String = ""
     @State private var isRefreshing = false
+    @State private var isSaving = false
+    @State private var errorMsg: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -840,6 +842,10 @@ struct EditRuleSheet: View {
                 GlassTextField(placeholder: "e.g. work services", text: $notes, colors: colors)
             }
 
+            if let e = errorMsg {
+                Text(e).font(.system(size: 12)).foregroundColor(colors.accentRed)
+            }
+
             HStack(spacing: 10) {
                 Button { isPresented = false } label: {
                     Text("Cancel").font(.system(size: 13, weight: .medium))
@@ -852,17 +858,52 @@ struct EditRuleSheet: View {
                 .buttonStyle(.plain)
 
                 Button {
+                    let cleaned = RouteManager.cleanDomain(domain)
+                    guard !cleaned.isEmpty else {
+                        errorMsg = "Please enter a domain name."
+                        return
+                    }
+                    guard isSafeDomain(cleaned) else {
+                        errorMsg = "Invalid domain name."
+                        return
+                    }
+                    // Validate manual IPs
+                    let rawIPs = manualIPsText.components(separatedBy: CharacterSet(charactersIn: ",\n "))
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    let invalidIPs = rawIPs.filter { !isSafeIPv4($0) }
+                    if !invalidIPs.isEmpty {
+                        errorMsg = "Invalid IP(s): \(invalidIPs.joined(separator: ", "))"
+                        return
+                    }
                     let manualIPs = parseManualIPs(manualIPsText)
-                    routeManager.updateRule(rule, newDomain: domain, newNotes: notes, newManualIPs: manualIPs)
-                    isPresented = false
+                    let domainChanged = cleaned.lowercased() != rule.domain.lowercased()
+                    errorMsg = nil
+
+                    routeManager.updateRule(rule, newDomain: cleaned, newNotes: notes, newManualIPs: manualIPs)
+
+                    // Re-resolve IPs if domain changed
+                    if domainChanged {
+                        isSaving = true
+                        Task {
+                            await routeManager.refreshIPs(for: rule)
+                            isPresented = false
+                        }
+                    } else {
+                        isPresented = false
+                    }
                 } label: {
-                    Text("Save Changes").font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .leading, endPoint: .trailing))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    HStack(spacing: 6) {
+                        if isSaving { ProgressView().scaleEffect(0.6).tint(.white).frame(width: 14, height: 14) }
+                        Text(isSaving ? "Resolving..." : "Save Changes").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(LinearGradient(colors: [Color(hex:"3b82f6"), Color(hex:"1d4ed8")], startPoint: .leading, endPoint: .trailing))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
+                .disabled(isSaving)
             }
         }
         .padding(24)
