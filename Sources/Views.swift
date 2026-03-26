@@ -201,6 +201,32 @@ struct ContentView: View {
                 break
             }
         }
+        // Keyboard shortcuts
+        .background(
+            Group {
+                Button("") { showAddSheet = true }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .hidden()
+                Button("") {
+                    if routeManager.isRulesApplied {
+                        routeManager.stopAllRules()
+                    } else {
+                        routeManager.applyAllActiveRules()
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .hidden()
+                Button("") { selectedTab = .rules }
+                    .keyboardShortcut("1", modifiers: .command)
+                    .hidden()
+                Button("") { selectedTab = .logs }
+                    .keyboardShortcut("2", modifiers: .command)
+                    .hidden()
+                Button("") { selectedTab = .settings }
+                    .keyboardShortcut("3", modifiers: .command)
+                    .hidden()
+            }
+        )
     }
 }
 
