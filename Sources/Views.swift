@@ -769,6 +769,21 @@ struct RuleRowView: View {
                 .buttonStyle(.plain)
                 .help("Refresh IPs")
 
+                // Duplicate
+                Button {
+                    Task {
+                        await routeManager.addRule(
+                            domain: rule.domain + ".copy",
+                            notes: rule.notes,
+                            manualIPs: rule.manualIPs
+                        )
+                    }
+                } label: {
+                    Image(systemName: "doc.on.doc").font(.system(size: 11)).foregroundColor(colors.secondaryText.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .help("Duplicate rule")
+
                 // Delete (with confirmation)
                 Button { routeManager.confirmRemoveRule(rule) } label: {
                     Image(systemName: "trash").font(.system(size: 12)).foregroundColor(colors.accentRed.opacity(0.7))
