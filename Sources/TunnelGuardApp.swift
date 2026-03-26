@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import Foundation
 import Combine
+import SystemConfiguration
 
 // MARK: - App Entry Point
 @main
@@ -47,6 +48,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var mainWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
+    private var reachability: SCNetworkReachability?
+    private var lastGateway: String = ""
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // ── Single-instance enforcement ──
@@ -94,6 +97,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Grab main window reference once SwiftUI creates it
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             self.mainWindow = NSApp.windows.first(where: { !($0 is NSPanel) })
+        }
+
+        // Monitor network changes for auto gateway re-detection
+        startNetworkMonitoring()
+    }
+
+    private func startNetworkMonitoring() {
+        lastGateway = AppSettings.shared.effectiveGateway
+        var zeroAddr = sockaddr_in()
+        zeroAddr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        zeroAddr.sin_family = sa_family_t(AF_INET)
+
+        guard let ref = withUnsafePointer(to: &zeroAddr, {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                SCNetworkReachabilityCreateWithAddress(nil, $0)
+            }
+        }) else { return }
+
+        reachability = ref
+        var context = SCNetworkReachabilityContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
+
+        SCNetworkReachabilitySetCallback(ref, { (_, _, info) in
+            guard let info = info else { return }
+            let delegate = Unmanaged<AppDelegate>.fromOpaque(info).takeUnretainedValue()
+            delegate.handleNetworkChange()
+        }, &context)
+
+        SCNetworkReachabilitySetDispatchQueue(ref, DispatchQueue.global(qos: .utility))
+    }
+
+    private func handleNetworkChange() {
+        // Re-detect gateway after a brief delay to let network settle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            let previousGateway = self.lastGateway
+            AppSettings.shared.detectGateway()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                let newGateway = AppSettings.shared.effectiveGateway
+                if !newGateway.isEmpty && newGateway != previousGateway {
+                    self.lastGateway = newGateway
+                    RouteManager.shared.log("Network change detected: gateway \(previousGateway.isEmpty ? "none" : previousGateway) → \(newGateway)")
+                    // Re-apply routes if they were active
+                    if RouteManager.shared.isRulesApplied {
+                        RouteManager.shared.log("Re-applying rules with new gateway...")
+                        RouteManager.shared.applyAllActiveRules()
+                    }
+                }
+            }
         }
     }
 
