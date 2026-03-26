@@ -78,8 +78,8 @@ class AppSettings: ObservableObject {
                     self.detectedGatewayIP = gateway
                     self.gatewayError = nil
                 } else {
-                    // Non-IP result like "link#28"
-                    self.detectedGatewayIP = gateway
+                    // Non-IP result like "link#28" — don't store invalid value
+                    self.detectedGatewayIP = ""
                     self.gatewayError = "Detected \"\(gateway)\" which is not a valid IP. Please enter gateway manually."
                 }
             }
@@ -154,9 +154,9 @@ class AppSettings: ObservableObject {
 </plist>
 """
             try? plist.write(toFile: plistPath, atomically: true, encoding: .utf8)
-            shell("launchctl load \(plistPath)")
+            shell("launchctl load \(shellQuote(plistPath))")
         } else {
-            shell("launchctl unload \(plistPath) 2>/dev/null || true")
+            shell("launchctl unload \(shellQuote(plistPath)) 2>/dev/null || true")
             try? FileManager.default.removeItem(atPath: plistPath)
         }
     }
@@ -173,6 +173,8 @@ struct PrivilegeHelper {
         let escaped = command
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "$", with: "\\$")
+            .replacingOccurrences(of: "`", with: "\\`")
         let appleScript = "do shell script \"\(escaped)\" with administrator privileges"
 
         let process = Process()
@@ -234,11 +236,10 @@ struct PrivilegeHelper {
     /// Returns (success, message).
     static func grantAdmin() -> (Bool, String) {
         let user = NSUserName()
-        // Grant NOPASSWD for route and common system commands used by TunnelGuard
-        // Using ALL for simplicity — the sudoers file itself is protected by root ownership
-        let line = "\(user) ALL=(ALL) NOPASSWD: /sbin/route, /usr/bin/tee, /bin/cp, /bin/chmod, /usr/sbin/chown, /usr/bin/dscacheutil, /usr/bin/killall"
+        // Grant NOPASSWD only for specific commands TunnelGuard needs, restricted to root target
+        let line = "\(user) ALL=(root) NOPASSWD: /sbin/route, /bin/cp /tmp/tunnelguard_* /etc/hosts, /bin/chmod 644 /etc/hosts, /usr/sbin/chown root\\:wheel /etc/hosts, /usr/bin/dscacheutil -flushcache, /usr/bin/killall -HUP mDNSResponder"
         // We need admin to write to /etc/sudoers.d/
-        let cmd = "echo '\(line)' > \(sudoersFile) && chmod 0440 \(sudoersFile) && chown root:wheel \(sudoersFile)"
+        let cmd = "echo '\(line)' > \(shellQuote(sudoersFile)) && chmod 0440 \(shellQuote(sudoersFile)) && chown root:wheel \(shellQuote(sudoersFile))"
         let result = runAsAdmin(cmd)
         if result.contains("Error:") {
             return (false, result)
@@ -336,7 +337,7 @@ class HostsFileManager {
 
     /// Write content to /etc/hosts using elevated privileges.
     private func writeHosts(_ content: String) -> (Bool, String) {
-        let tmpFile = "/tmp/tunnelguard_hosts_\(Int(Date().timeIntervalSince1970))"
+        let tmpFile = "/tmp/tunnelguard_hosts_\(UUID().uuidString)"
 
         // Step 1: Write content to temp file (app can write to /tmp without sudo)
         do {
@@ -353,11 +354,13 @@ class HostsFileManager {
         // Step 2: Copy temp file to /etc/hosts with elevated privileges
         // Always use osascript for /etc/hosts writes — it's the most reliable method
         // even when admin (sudoers) is granted, because sudoers argument matching is strict
-        let copyCmd = "cp '\(tmpFile)' '\(hostsPath)' && chmod 644 '\(hostsPath)' && chown root:wheel '\(hostsPath)'"
+        let qTmp = shellQuote(tmpFile)
+        let qHosts = shellQuote(hostsPath)
+        let copyCmd = "cp \(qTmp) \(qHosts) && chmod 644 \(qHosts) && chown root:wheel \(qHosts)"
         let result: String
         if PrivilegeHelper.isAdminGranted() {
             // Try sudo first
-            result = shell("sudo cp '\(tmpFile)' '\(hostsPath)' 2>&1 && sudo chmod 644 '\(hostsPath)' 2>&1 && sudo chown root:wheel '\(hostsPath)' 2>&1")
+            result = shell("sudo cp \(qTmp) \(qHosts) 2>&1 && sudo chmod 644 \(qHosts) 2>&1 && sudo chown root:wheel \(qHosts) 2>&1")
             // If sudo failed (password needed, permission denied), fall back to osascript
             if result.contains("password") || result.contains("denied") || result.contains("not permitted") {
                 let fallback = PrivilegeHelper.runAsAdmin(copyCmd)
@@ -590,12 +593,37 @@ class RouteManager: ObservableObject {
         activeRulesCount = rules.filter { $0.isEnabled }.count
     }
 
+    /// Clean a pasted URL to extract just the domain/subdomain.
+    static func cleanDomain(_ input: String) -> String {
+        var s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Remove protocol
+        for prefix in ["https://", "http://"] {
+            if s.lowercased().hasPrefix(prefix) {
+                s = String(s.dropFirst(prefix.count))
+            }
+        }
+        // Remove path, query, fragment (take only host part)
+        if let slash = s.firstIndex(of: "/") { s = String(s[s.startIndex..<slash]) }
+        if let q = s.firstIndex(of: "?") { s = String(s[s.startIndex..<q]) }
+        if let h = s.firstIndex(of: "#") { s = String(s[s.startIndex..<h]) }
+        // Remove port
+        if let colon = s.firstIndex(of: ":") { s = String(s[s.startIndex..<colon]) }
+        // Remove www.
+        if s.lowercased().hasPrefix("www.") { s = String(s.dropFirst(4)) }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func addRule(domain: String, notes: String = "", manualIPs: [String] = []) async -> RouteRule? {
-        let trimmed = domain.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "https://", with: "")
-            .replacingOccurrences(of: "http://", with: "")
-            .replacingOccurrences(of: "www.", with: "")
+        let trimmed = RouteManager.cleanDomain(domain)
         guard !trimmed.isEmpty else { return nil }
+
+        // Prevent duplicate domain rules
+        if rules.contains(where: { $0.domain.lowercased() == trimmed.lowercased() }) {
+            await MainActor.run {
+                log("⚠️ Rule for \(trimmed) already exists")
+            }
+            return nil
+        }
 
         var rule = RouteRule(domain: trimmed, manualIPs: manualIPs, notes: notes)
         let (ips, debugOutput) = await resolveIPsDetailed(for: trimmed)
@@ -610,6 +638,14 @@ class RouteManager: ObservableObject {
                 if !debugOutput.isEmpty { log("   output: \(debugOutput)") }
             } else {
                 log("Added rule for \(trimmed) → \(rule.allIPs.joined(separator: ", "))")
+            }
+            // Auto-apply routes and hosts for the new rule if rules are currently active
+            if isRulesApplied && rule.isEnabled && !rule.allIPs.isEmpty {
+                applyRoutes(for: rule)
+                if AppSettings.shared.writeToHosts {
+                    syncHostsFile()
+                }
+                log("Auto-applied routes for newly added domain: \(trimmed)")
             }
         }
         return rule
@@ -716,10 +752,17 @@ class RouteManager: ObservableObject {
             return
         }
 
+        guard isSafeIPv4(gw) else {
+            log("⚠️ Gateway is not a valid IP: \(gw)")
+            isApplying = false
+            applyResult = .error("Invalid gateway IP")
+            return
+        }
+
         // Collect all route-add commands for a single admin prompt
         var commands: [String] = []
         for rule in rules where rule.isEnabled {
-            for ip in rule.allIPs {
+            for ip in rule.allIPs where isSafeIPv4(ip) {
                 let cmd = "route -n add \(ip) \(gw) 2>&1"
                 commands.append(cmd)
                 logCommand("route -n add \(ip) \(gw)")
@@ -790,7 +833,7 @@ class RouteManager: ObservableObject {
 
         var commands: [String] = []
         for rule in rules {
-            for ip in rule.allIPs {
+            for ip in rule.allIPs where isSafeIPv4(ip) {
                 commands.append("route -n delete \(ip) 2>&1 || true")
                 logCommand("route -n delete \(ip)")
             }
@@ -836,7 +879,7 @@ class RouteManager: ObservableObject {
     func removeAllRoutes() {
         var commands: [String] = []
         for rule in rules {
-            for ip in rule.allIPs {
+            for ip in rule.allIPs where isSafeIPv4(ip) {
                 commands.append("route -n delete \(ip) 2>&1 || true")
                 logCommand("route -n delete \(ip)")
             }
@@ -849,10 +892,10 @@ class RouteManager: ObservableObject {
 
     private func applyRoutes(for rule: RouteRule) {
         let gw = AppSettings.shared.effectiveGateway
-        guard !gw.isEmpty else { log("⚠️ No gateway set"); return }
+        guard !gw.isEmpty, isSafeIPv4(gw) else { log("⚠️ No valid gateway set"); return }
 
         var commands: [String] = []
-        for ip in rule.allIPs {
+        for ip in rule.allIPs where isSafeIPv4(ip) {
             let cmd = "route -n add \(ip) \(gw) 2>&1"
             commands.append(cmd)
             logCommand("route -n add \(ip) \(gw)")
@@ -872,7 +915,7 @@ class RouteManager: ObservableObject {
 
     private func removeRoutes(for rule: RouteRule) {
         var commands: [String] = []
-        for ip in rule.allIPs {
+        for ip in rule.allIPs where isSafeIPv4(ip) {
             commands.append("route -n delete \(ip) 2>&1 || true")
         }
         if !commands.isEmpty {
@@ -942,6 +985,16 @@ class RouteManager: ObservableObject {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let dns = AppSettings.shared.dnsServer.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Validate domain and DNS server before building shell commands
+                guard isSafeDomain(domain) else {
+                    continuation.resume(returning: ([], "Invalid domain name"))
+                    return
+                }
+                if !dns.isEmpty && !isSafeIPv4(dns) {
+                    continuation.resume(returning: ([], "Invalid DNS server IP"))
+                    return
+                }
 
                 // Build dig command: use @server only if DNS is configured
                 let digCmd: String
@@ -1045,4 +1098,27 @@ func shell(_ command: String) -> String {
     process.waitUntilExit()
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     return String(data: data, encoding: .utf8) ?? ""
+}
+
+// MARK: - Input Sanitization
+
+/// Validate that a string is a safe IPv4 address (digits and dots only).
+func isSafeIPv4(_ s: String) -> Bool {
+    let parts = s.components(separatedBy: ".")
+    guard parts.count == 4 else { return false }
+    return parts.allSatisfy { part in
+        guard let n = Int(part), n >= 0, n <= 255 else { return false }
+        return true
+    }
+}
+
+/// Validate a domain is safe for shell use (alphanumeric, dots, hyphens only).
+func isSafeDomain(_ s: String) -> Bool {
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
+    return !s.isEmpty && s.unicodeScalars.allSatisfy { allowed.contains($0) } && s.count <= 253
+}
+
+/// Shell-quote a string by wrapping in single quotes and escaping embedded single quotes.
+func shellQuote(_ s: String) -> String {
+    return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
 }

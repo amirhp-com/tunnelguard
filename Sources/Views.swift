@@ -673,6 +673,10 @@ struct AddRuleSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Domain").font(.system(size: 12, weight: .medium)).foregroundColor(colors.secondaryText)
                 GlassTextField(placeholder: "e.g. example.com", text: $domain, colors: colors)
+                    .onChange(of: domain) { newValue in
+                        let cleaned = RouteManager.cleanDomain(newValue)
+                        if cleaned != newValue { domain = cleaned }
+                    }
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -704,15 +708,39 @@ struct AddRuleSheet: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    guard !domain.trimmingCharacters(in: .whitespaces).isEmpty else {
+                    let cleaned = RouteManager.cleanDomain(domain)
+                    guard !cleaned.isEmpty else {
                         errorMsg = "Please enter a domain name."
+                        return
+                    }
+                    guard isSafeDomain(cleaned) else {
+                        errorMsg = "Invalid domain name. Only letters, numbers, dots, and hyphens are allowed."
+                        return
+                    }
+                    if routeManager.rules.contains(where: { $0.domain.lowercased() == cleaned.lowercased() }) {
+                        errorMsg = "A rule for this domain already exists."
+                        return
+                    }
+                    // Validate manual IPs
+                    let rawIPs = manualIPsText.components(separatedBy: CharacterSet(charactersIn: ",\n "))
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    let invalidIPs = rawIPs.filter { !isSafeIPv4($0) }
+                    if !invalidIPs.isEmpty {
+                        errorMsg = "Invalid IP(s): \(invalidIPs.joined(separator: ", "))"
                         return
                     }
                     let manualIPs = parseManualIPs(manualIPsText)
                     isAdding = true
+                    errorMsg = nil
                     Task {
-                        await routeManager.addRule(domain: domain, notes: notes, manualIPs: manualIPs)
-                        isPresented = false
+                        let result = await routeManager.addRule(domain: domain, notes: notes, manualIPs: manualIPs)
+                        if result == nil && !cleaned.isEmpty {
+                            errorMsg = "A rule for this domain already exists."
+                            isAdding = false
+                        } else {
+                            isPresented = false
+                        }
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -765,6 +793,10 @@ struct EditRuleSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Domain").font(.system(size: 12, weight: .medium)).foregroundColor(colors.secondaryText)
                 GlassTextField(placeholder: "e.g. example.com", text: $domain, colors: colors)
+                    .onChange(of: domain) { newValue in
+                        let cleaned = RouteManager.cleanDomain(newValue)
+                        if cleaned != newValue { domain = cleaned }
+                    }
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -848,7 +880,7 @@ struct EditRuleSheet: View {
 func parseManualIPs(_ text: String) -> [String] {
     text.components(separatedBy: CharacterSet(charactersIn: ",\n "))
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
+        .filter { !$0.isEmpty && isSafeIPv4($0) }
 }
 
 // MARK: - Empty State
