@@ -339,6 +339,12 @@ class HostsFileManager {
     private func writeHosts(_ content: String) -> (Bool, String) {
         let tmpFile = "/tmp/tunnelguard_hosts_\(UUID().uuidString)"
 
+        // Step 0: Backup existing hosts file
+        let backupPath = "/tmp/tunnelguard_hosts_backup"
+        if let existing = try? String(contentsOfFile: hostsPath, encoding: .utf8) {
+            try? existing.write(toFile: backupPath, atomically: true, encoding: .utf8)
+        }
+
         // Step 1: Write content to temp file (app can write to /tmp without sudo)
         do {
             try content.write(toFile: tmpFile, atomically: true, encoding: .utf8)
