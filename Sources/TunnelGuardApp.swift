@@ -202,7 +202,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openItem.image = NSImage(systemSymbolName: "shield.lefthalf.filled", accessibilityDescription: "App Icon")
         menu.addItem(openItem)
 
-        let applyItem = NSMenuItem(title: RouteManager.shared.isRulesApplied ? "Stop Rules" : "Apply Rules", action: #selector(toggleFromMenu), keyEquivalent: "")
+        let applyItem = NSMenuItem(title: RouteManager.shared.isRulesApplied ? "Stop Whitelisting" : "Start Whitelisting", action: #selector(toggleFromMenu), keyEquivalent: "")
         applyItem.target = self
         applyItem.image = NSImage(systemSymbolName: RouteManager.shared.isRulesApplied ? "stop.fill" : "play.fill", accessibilityDescription: "Setting Icon")
         menu.addItem(applyItem)

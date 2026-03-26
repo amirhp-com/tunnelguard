@@ -2,6 +2,18 @@
 
 All notable changes to TunnelGuard are documented in this file.
 
+## [2.7.0] — 2026-03-26
+
+### Fixed
+- **Hosts file not updated on new domain** — When adding a new domain while whitelisting is active, `/etc/hosts` is now properly updated on a background thread to include the newly added domain.
+
+### Added
+- **Add button in rules header** — Blue `+` button next to export/import icons for quick domain addition.
+- **Search auto-cleaning** — Pasting a URL in the search field now auto-cleans it to extract just the domain, matching the add domain behavior.
+
+### Changed
+- **Better button labels** — "Apply Rules" / "Stop Rules" renamed to "Start Whitelisting" / "Stop Whitelisting" for clearer intent. Menu bar context menu updated to match.
+
 ## [2.6.0] — 2026-03-26
 
 ### Security

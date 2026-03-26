@@ -673,13 +673,16 @@ class RouteManager: ObservableObject {
             } else {
                 log("Added rule for \(trimmed) → \(rule.allIPs.joined(separator: ", "))")
             }
-            // Auto-apply routes and hosts for the new rule if rules are currently active
+            // Auto-apply routes for the new rule if rules are currently active
             if isRulesApplied && rule.isEnabled && !rule.allIPs.isEmpty {
                 applyRoutes(for: rule)
-                if AppSettings.shared.writeToHosts {
-                    syncHostsFile()
-                }
                 log("Auto-applied routes for newly added domain: \(trimmed)")
+            }
+        }
+        // Sync hosts file on background thread after rule is added (avoids privilege prompt on main thread)
+        if AppSettings.shared.writeToHosts && rule.isEnabled && !rule.allIPs.isEmpty {
+            DispatchQueue.global(qos: .userInitiated).async {
+                self.syncHostsFile()
             }
         }
         return rule

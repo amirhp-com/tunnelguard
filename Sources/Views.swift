@@ -355,7 +355,7 @@ struct SidebarView: View {
                             Image(systemName: routeManager.isRulesApplied ? "stop.fill" : "play.fill")
                                 .font(.system(size: 11))
                         }
-                        Text(routeManager.isApplying ? "Applying..." : (routeManager.isRulesApplied ? "Stop Rules" : "Apply Rules"))
+                        Text(routeManager.isApplying ? "Activating..." : (routeManager.isRulesApplied ? "Stop Whitelisting" : "Start Whitelisting"))
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundColor(.white)
@@ -548,12 +548,28 @@ struct RulesView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Import rules from JSON")
+
+                // Add rule button
+                Button { showAddSheet = true } label: {
+                    Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(7)
+                        .background(Color(hex:"3b82f6"))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .help("Add new domain")
+
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundColor(colors.secondaryText).font(.system(size: 12))
                     TextField("Search domains...", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
                         .foregroundColor(colors.primaryText)
+                        .onChange(of: searchText) { newValue in
+                            let cleaned = RouteManager.cleanDomain(newValue)
+                            if cleaned != newValue { searchText = cleaned }
+                        }
                 }
                 .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(colors.inputBg)

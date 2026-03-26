@@ -5,12 +5,12 @@
 **macOS VPN Split-Tunnel Manager** — Exclude specific domains from your VPN tunnel with a clean, native macOS interface.
 
 [![Download Latest](https://img.shields.io/badge/Download-Latest%20Release-blue?logo=apple)](https://github.com/amirhp-com/tunnelguard/releases/latest)
-[![macOS](https://img.shields.io/badge/version-2.6.0-purple)](https://github.com/amirhp-com/tunnelguard)
+[![macOS](https://img.shields.io/badge/version-2.7.0-purple)](https://github.com/amirhp-com/tunnelguard)
 [![macOS](https://img.shields.io/badge/macOS-13.0%2B-green)](https://github.com/amirhp-com/tunnelguard)
 [![License](https://img.shields.io/badge/License-GPLv3-orange)](https://github.com/amirhp-com/tunnelguard/blob/main/LICENSE)
 [![Build](https://github.com/amirhp-com/tunnelguard/actions/workflows/build.yml/badge.svg)](https://github.com/amirhp-com/tunnelguard/actions/workflows/build.yml)
 
-> **Version 2.6.0** (Build 145) &middot; Released 2026-03-26
+> **Version 2.7.0** (Build 147) &middot; Released 2026-03-26
 >
 > Developer: [Amirhossein Hosseinpour (AmirhpCom)](https://amirhp.com/landing) &middot; [GitHub](https://github.com/amirhp-com)
 >
@@ -54,7 +54,7 @@ This is commonly called **split tunneling**. macOS doesn't expose this natively 
 - **Auto IP Resolution** — Uses `dig` / `nslookup` to discover all IPs (supports multiple IPs per domain)
 - **Manual IP entry** — Add custom IPs alongside auto-resolved ones
 - **Gateway auto-detection** — Detects your local default gateway with IP validation, or manual override
-- **Apply/Stop toggle** — One-click to apply all rules, one-click to stop
+- **Start/Stop Whitelisting** — One-click to apply all rules, one-click to stop
 - **DNS Bypass** — Write resolved IPs to `/etc/hosts` to bypass VPN DNS completely
 - **Network change detection** — Auto re-detects gateway and re-applies rules on network changes
 
@@ -124,7 +124,7 @@ This tells your Mac: "For traffic to this IP, use the local gateway — not the 
 3. Enter the domain (e.g., `office.company.com`) — URLs are auto-cleaned
 4. Optionally add manual IPs and a note
 5. Click **"Add Rule"** — TunnelGuard resolves the domain's IPs
-6. Click **"Apply Rules"** (or press `Cmd+Shift+R`) to activate all enabled rules
+6. Click **"Start Whitelisting"** (or press `Cmd+Shift+R`) to activate all enabled rules
 
 ### Gateway Configuration
 
@@ -149,7 +149,7 @@ By default, TunnelGuard uses `8.8.8.8` (Google DNS) for resolving domains. You c
 | Shortcut | Action |
 |----------|--------|
 | `Cmd+N` | Add new rule |
-| `Cmd+Shift+R` | Apply / Stop rules |
+| `Cmd+Shift+R` | Start / Stop Whitelisting |
 | `Cmd+1` | Switch to Rules tab |
 | `Cmd+2` | Switch to Logs tab |
 | `Cmd+3` | Switch to Settings tab |
